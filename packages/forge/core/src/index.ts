@@ -1,4 +1,4 @@
-import { variableStringSchema } from "@typebot.io/variables/schemas";
+import { singleVariableOrNumberSchema } from "@typebot.io/variables/schemas";
 import { z } from "@typebot.io/zod";
 import type { ZodLayoutMetadata } from "@typebot.io/zod";
 import type {
@@ -7,19 +7,12 @@ import type {
   BlockDefinition,
 } from "./types";
 
-export const createAuth = <
-  A extends {
-    type: "encryptedCredentials";
-    name: string;
-    schema: z.ZodObject<any>;
-  },
->(
-  authDefinition: A,
-) => authDefinition;
+export const createAuth = <T extends AuthDefinition<any>>(authDefinition: T) =>
+  authDefinition;
 
 export const createBlock = <
   Id extends string,
-  A extends AuthDefinition,
+  A extends AuthDefinition<any>,
   O extends z.ZodObject<any>,
 >(
   blockDefinition: BlockDefinition<Id, A, O>,
@@ -28,14 +21,14 @@ export const createBlock = <
 export const createVersionedBlock = <
   Blocks extends Record<
     string,
-    BlockDefinition<string, AuthDefinition, z.ZodObject<any>>
+    BlockDefinition<string, AuthDefinition<any>, z.ZodObject<any>>
   >,
 >(
   blocks: Blocks,
 ): Blocks => blocks;
 
 export const createAction = <
-  A extends AuthDefinition,
+  A extends AuthDefinition<any>,
   BaseOptions extends z.ZodObject<z.ZodRawShape> = z.ZodObject<{}>,
   O extends z.ZodObject<z.ZodRawShape> = z.ZodObject<{}>,
 >(
@@ -47,7 +40,7 @@ export const createAction = <
 
 export const parseBlockSchema = <
   I extends string,
-  A extends AuthDefinition,
+  A extends AuthDefinition<any>,
   O extends z.ZodObject<any>,
 >(
   blockDefinition: BlockDefinition<I, A, O>,
@@ -97,19 +90,31 @@ export const parseBlockSchema = <
 
 export const parseBlockCredentials = <
   I extends string,
-  A extends z.ZodObject<any>,
+  A extends AuthDefinition<any>,
 >(
   blockId: I,
-  authSchema: A,
+  authDefinition: A,
 ) => {
   return z.object({
     id: z.string(),
     type: z.literal(blockId),
     createdAt: z.date(),
-    workspaceId: z.string(),
     name: z.string(),
     iv: z.string(),
-    data: authSchema,
+    data:
+      authDefinition.type === "oauth"
+        ? z.object({
+            customClient: z.object({
+              id: z.string(),
+              secret: z.string(),
+            }),
+            credentials: z.object({
+              accessToken: z.string(),
+              refreshToken: z.string(),
+              expiryDate: z.number(),
+            }),
+          })
+        : authDefinition.schema,
   });
 };
 
@@ -120,7 +125,8 @@ export const option = {
   boolean: z.boolean().optional(),
   enum: <T extends string>(values: readonly [T, ...T[]]) =>
     z.enum(values).optional(),
-  number: z.number().or(variableStringSchema).optional(),
+  number: singleVariableOrNumberSchema.optional(),
+  staticNumber: z.number().optional(),
   array: <T extends z.ZodTypeAny>(schema: T) => z.array(schema).optional(),
   discriminatedUnion: <
     T extends string,
@@ -153,7 +159,6 @@ export const option = {
             .layout({
               ...(layouts?.item ?? {}),
               placeholder: "Select a response",
-              defaultValue: items[0],
             }),
           variableId: z
             .string()

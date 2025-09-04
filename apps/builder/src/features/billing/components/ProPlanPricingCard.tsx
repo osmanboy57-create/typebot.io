@@ -1,13 +1,11 @@
 import { MoreInfoTooltip } from "@/components/MoreInfoTooltip";
 import {
-  Button,
   Flex,
   HStack,
   Heading,
   Stack,
   Tag,
   Text,
-  Tooltip,
   chakra,
   useColorModeValue,
   useDisclosure,
@@ -16,7 +14,9 @@ import { T, useTranslate } from "@tolgee/react";
 import { prices } from "@typebot.io/billing/constants";
 import { formatPrice } from "@typebot.io/billing/helpers/formatPrice";
 import { Plan } from "@typebot.io/prisma/enum";
-import { ChatsProTiersModal } from "./ChatsProTiersModal";
+import { Button } from "@typebot.io/ui/components/Button";
+import { Tooltip } from "@typebot.io/ui/components/Tooltip";
+import { ChatsProTiersDialog } from "./ChatsProTiersDialog";
 import { FeaturesList } from "./FeaturesList";
 
 type Props = {
@@ -43,7 +43,7 @@ export const ProPlanPricingCard = ({
 
   return (
     <>
-      <ChatsProTiersModal isOpen={isOpen} onClose={onClose} />{" "}
+      <ChatsProTiersDialog isOpen={isOpen} onClose={onClose} />{" "}
       <Flex
         p="6"
         pos="relative"
@@ -52,17 +52,17 @@ export const ProPlanPricingCard = ({
         flex="1"
         flexShrink={0}
         borderWidth="1px"
-        borderColor={useColorModeValue("blue.500", "blue.300")}
+        borderColor={useColorModeValue("purple.500", "purple.300")}
         rounded="lg"
       >
         <Flex justifyContent="center">
           <Tag
             pos="absolute"
             top="-10px"
-            colorScheme="blue"
-            bg={useColorModeValue("blue.500", "blue.400")}
+            colorScheme="orange"
+            bg={useColorModeValue("purple.500", "purple.400")}
             variant="solid"
-            fontWeight="semibold"
+            fontWeight="medium"
             style={{ marginTop: 0 }}
           >
             {t("billing.pricingCard.pro.mostPopularLabel")}
@@ -76,7 +76,7 @@ export const ProPlanPricingCard = ({
                 params={{
                   strong: (
                     <chakra.span
-                      color={useColorModeValue("blue.400", "blue.300")}
+                      color={useColorModeValue("purple.400", "purple.300")}
                     >
                       Pro
                     </chakra.span>
@@ -95,8 +95,11 @@ export const ProPlanPricingCard = ({
                 </chakra.span>
               </Heading>
               <Text fontWeight="bold">
-                <Tooltip
-                  label={
+                <Tooltip.Root>
+                  <Tooltip.Trigger className="underline cursor-pointer">
+                    {t("billing.pricingCard.pro.everythingFromStarter")}
+                  </Tooltip.Trigger>
+                  <Tooltip.Popup>
                     <FeaturesList
                       features={[
                         t("billing.pricingCard.starter.brandingRemoved"),
@@ -105,14 +108,9 @@ export const ProPlanPricingCard = ({
                       ]}
                       spacing="0"
                     />
-                  }
-                  hasArrow
-                  placement="top"
-                >
-                  <chakra.span textDecoration="underline" cursor="pointer">
-                    {t("billing.pricingCard.pro.everythingFromStarter")}
-                  </chakra.span>
-                </Tooltip>
+                  </Tooltip.Popup>
+                </Tooltip.Root>
+
                 {t("billing.pricingCard.plus")}
               </Text>
               <FeaturesList
@@ -145,11 +143,9 @@ export const ProPlanPricingCard = ({
             </Stack>
 
             <Button
-              colorScheme="blue"
-              variant="outline"
+              variant="secondary"
               onClick={onPayClick}
-              isLoading={isLoading}
-              isDisabled={currentPlan === Plan.PRO}
+              disabled={isLoading || currentPlan === Plan.PRO}
             >
               {getButtonLabel()}
             </Button>

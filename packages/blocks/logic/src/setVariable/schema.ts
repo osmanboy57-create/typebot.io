@@ -1,6 +1,7 @@
 import { blockBaseSchema } from "@typebot.io/blocks-base/schemas";
 import { z } from "@typebot.io/zod";
 import { LogicBlockType } from "../constants";
+import { valueTypesWithNoOptions } from "./constants";
 
 const baseOptions = z.object({
   variableId: z.string().optional(),
@@ -8,18 +9,7 @@ const baseOptions = z.object({
 });
 
 const basicSetVariableOptionsSchema = baseOptions.extend({
-  type: z.enum([
-    "Today",
-    "Moment of the day",
-    "Empty",
-    "Environment name",
-    "User ID",
-    "Result ID",
-    "Random ID",
-    "Phone number",
-    "Contact name",
-    "Transcript",
-  ]),
+  type: z.enum(valueTypesWithNoOptions),
 });
 
 const popOrShiftSetVariableOptionsSchema = baseOptions.extend({
@@ -32,16 +22,11 @@ const dateSetVariableOptionsSchema = baseOptions.extend({
   timeZone: z.string().optional(),
 });
 
-const initialSetVariableOptionsSchema = baseOptions.extend({
-  type: z.undefined(),
-  expressionToEvaluate: z.string().optional(),
-  isCode: z.boolean().optional(),
-});
-
 const customSetVariableOptionsSchema = baseOptions.extend({
-  type: z.literal("Custom"),
   expressionToEvaluate: z.string().optional(),
   isCode: z.boolean().optional(),
+  expressionDescription: z.string().optional(),
+  saveErrorInVariableId: z.string().optional(),
 });
 
 const mapListItemsOptionsSchema = baseOptions.extend({
@@ -61,10 +46,14 @@ const appendItemToListOptionsSchema = baseOptions.extend({
 });
 
 export const setVariableOptionsSchema = z.discriminatedUnion("type", [
-  initialSetVariableOptionsSchema,
+  customSetVariableOptionsSchema.extend({
+    type: z.undefined(),
+  }),
+  customSetVariableOptionsSchema.extend({
+    type: z.literal("Custom"),
+  }),
   dateSetVariableOptionsSchema,
   basicSetVariableOptionsSchema,
-  customSetVariableOptionsSchema,
   mapListItemsOptionsSchema,
   appendItemToListOptionsSchema,
   popOrShiftSetVariableOptionsSchema,

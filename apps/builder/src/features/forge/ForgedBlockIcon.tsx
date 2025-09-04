@@ -9,18 +9,20 @@ export const ForgedBlockIcon = ({
   type: ForgedBlock["type"];
 } & IconProps): JSX.Element => {
   const { colorMode } = useColorMode();
-  const { blockDef } = useForgedBlock(type);
+  const { blockDef } = useForgedBlock({ nodeType: type });
   if (!blockDef) return <></>;
   if (colorMode === "dark" && blockDef.DarkLogo)
     return (
       <blockDef.DarkLogo
         width="1rem"
+        className={props.className}
         style={{ marginTop: props.mt?.toString() }}
       />
     );
   return (
     <blockDef.LightLogo
       width="1rem"
+      className={props.className}
       style={{ marginTop: props.mt?.toString() }}
     />
   );

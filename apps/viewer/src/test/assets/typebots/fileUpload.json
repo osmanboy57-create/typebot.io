@@ -1,5 +1,5 @@
 {
-  "version": "6",
+  "version": "6.1",
   "id": "cm0kr4xle00014e0mrmqvyp1x",
   "name": "My typebot",
   "events": [
@@ -35,6 +35,10 @@
           "options": {
             "variableId": "vcl45ok77i000a2e6g79ye53a2",
             "isMultipleAllowed": true,
+            "allowedFileTypes": {
+              "types": [".json"],
+              "isEnabled": true
+            },
             "labels": {
               "placeholder": "<strong>\n      Click to upload\n    </strong> or drag and drop<br>\n    (size limit: 10MB)",
               "button": "Upload"

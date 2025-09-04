@@ -123,8 +123,14 @@ const getSampleValue = (block: InputBlock, userEmail?: string): string => {
       return block.options?.isMultipleChoice
         ? block.items.map((item) => item.content).join(", ")
         : (block.items[0]?.content ?? "Item");
+    case InputBlockType.CARDS:
+      return block.items
+        .map((item) => item.title ?? item.description)
+        .join(", ");
     case InputBlockType.DATE:
       return new Date().toUTCString();
+    case InputBlockType.TIME:
+      return "14:00";
     case InputBlockType.EMAIL:
       return userEmail ?? "test@email.com";
     case InputBlockType.NUMBER:

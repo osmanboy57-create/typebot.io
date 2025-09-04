@@ -5,9 +5,11 @@ import {
   getBotOpenedStateFromStorage,
   removeBotOpenedStateInStorage,
   setBotOpenedStateInStorage,
+  wipeExistingChatStateInStorage,
 } from "@/utils/storage";
 import { EnvironmentProvider } from "@ark-ui/solid";
 import { isDefined, isNotDefined } from "@typebot.io/lib/utils";
+import typebotColors from "@typebot.io/ui/colors.css";
 import { zendeskWebWidgetOpenedMessage } from "@typebot.io/zendesk-block/constants";
 import {
   Show,
@@ -39,6 +41,7 @@ export const Popup = (props: PopupProps) => {
     "defaultOpen",
   ]);
 
+  const [currentTypebotId, setCurrentTypebotId] = createSignal<string>();
   const [prefilledVariables, setPrefilledVariables] = createSignal(
     botProps.prefilledVariables,
   );
@@ -87,14 +90,33 @@ export const Popup = (props: PopupProps) => {
   const processIncomingEvent = (event: MessageEvent<CommandData>) => {
     const { data } = event;
     if (!data.isFromTypebot || (data.id && botProps.id !== data.id)) return;
-    if (data.command === "open") openBot();
-    if (data.command === "close") closeBot();
-    if (data.command === "toggle") toggleBot();
-    if (data.command === "setPrefilledVariables")
-      setPrefilledVariables((existingPrefilledVariables) => ({
-        ...existingPrefilledVariables,
-        ...data.variables,
-      }));
+    switch (data.command) {
+      case "open":
+        openBot();
+        break;
+      case "close":
+        closeBot();
+        break;
+      case "toggle":
+        toggleBot();
+        break;
+      case "setPrefilledVariables":
+        setPrefilledVariables((existingPrefilledVariables) => ({
+          ...existingPrefilledVariables,
+          ...data.variables,
+        }));
+        break;
+      case "reload":
+        reloadBot();
+        break;
+      case "reset": {
+        const typebotId = currentTypebotId();
+        if (!typebotId) return;
+        wipeExistingChatStateInStorage(typebotId);
+        removeBotOpenedStateInStorage();
+        break;
+      }
+    }
   };
 
   const openBot = () => {
@@ -116,9 +138,18 @@ export const Popup = (props: PopupProps) => {
     isBotOpened() ? closeBot() : openBot();
   };
 
-  const handleOnChatStatePersisted = (isPersisted: boolean) => {
-    botProps.onChatStatePersisted?.(isPersisted);
-    if (isPersisted) setBotOpenedStateInStorage();
+  const reloadBot = () => {
+    setIsBotOpened(false);
+    setIsBotOpened(true);
+  };
+
+  const handleOnChatStatePersisted = (
+    isEnabled: boolean,
+    { typebotId }: { typebotId: string },
+  ) => {
+    botProps.onChatStatePersisted?.(isEnabled, { typebotId });
+    setCurrentTypebotId(typebotId);
+    if (isEnabled) setBotOpenedStateInStorage();
   };
 
   const handleScriptExecutionSuccessMessage = (message: string) => {
@@ -135,7 +166,10 @@ export const Popup = (props: PopupProps) => {
       <EnvironmentProvider
         value={document.querySelector("typebot-popup")?.shadowRoot as Node}
       >
-        <style>{styles}</style>
+        <style>
+          {typebotColors}
+          {styles}
+        </style>
         <div
           class="relative"
           aria-labelledby="modal-title"
@@ -145,7 +179,6 @@ export const Popup = (props: PopupProps) => {
             "z-index": props.theme?.zIndex ?? 42424242,
           }}
         >
-          <style>{styles}</style>
           <div
             class="fixed inset-0 bg-black bg-opacity-50 transition-opacity animate-fade-in"
             part="overlay"

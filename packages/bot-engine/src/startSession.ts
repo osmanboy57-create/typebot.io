@@ -1,4 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
+import * as Sentry from "@sentry/nextjs";
 import { TRPCError } from "@trpc/server";
 import { BubbleBlockType } from "@typebot.io/blocks-bubbles/constants";
 import { isInputBlock } from "@typebot.io/blocks-core/helpers";
@@ -7,46 +8,55 @@ import { IntegrationBlockType } from "@typebot.io/blocks-integrations/constants"
 import type { GoogleAnalyticsBlock } from "@typebot.io/blocks-integrations/googleAnalytics/schema";
 import type { PixelBlock } from "@typebot.io/blocks-integrations/pixel/schema";
 import { LogicBlockType } from "@typebot.io/blocks-logic/constants";
+import {
+  type StartChatInput,
+  type StartChatResponse,
+  type StartPreviewChatInput,
+  type StartTypebot,
+  type StartTypebotV6,
+  startTypebotSchema,
+} from "@typebot.io/chat-api/schemas";
+import type {
+  SessionState,
+  TypebotInSession,
+  TypebotInSessionV5,
+} from "@typebot.io/chat-session/schemas";
 import { env } from "@typebot.io/env";
 import { isDefined, isNotEmpty, omit } from "@typebot.io/lib/utils";
 import type { Prisma } from "@typebot.io/prisma/types";
-import { defaultSettings } from "@typebot.io/settings/constants";
+import { resultSchema } from "@typebot.io/results/schemas/results";
+import type { SessionStore } from "@typebot.io/runtime-session-store";
+import {
+  defaultSettings,
+  defaultSystemMessages,
+} from "@typebot.io/settings/constants";
+import { settingsSchema } from "@typebot.io/settings/schemas";
 import {
   defaultGuestAvatarIsEnabled,
   defaultHostAvatarIsEnabled,
 } from "@typebot.io/theme/constants";
 import type { Theme } from "@typebot.io/theme/schemas";
 import { deepParseVariables } from "@typebot.io/variables/deepParseVariables";
-import { injectVariablesFromExistingResult } from "@typebot.io/variables/injectVariablesFromExistingResult";
+import { injectVariableValues } from "@typebot.io/variables/injectVariableValues";
 import {
   getVariablesToParseInfoInText,
   parseVariables,
 } from "@typebot.io/variables/parseVariables";
-import { prefillVariables } from "@typebot.io/variables/prefillVariables";
 import type {
   SetVariableHistoryItem,
   Variable,
-  VariableWithValue,
 } from "@typebot.io/variables/schemas";
+import { transformPrefilledVariablesToVariables } from "@typebot.io/variables/transformPrefilledVariablesToVariables";
 import { NodeType, parse } from "node-html-parser";
-import { continueBotFlow } from "./continueBotFlow";
 import { getFirstEdgeId } from "./getFirstEdgeId";
-import { getNextGroup } from "./getNextGroup";
+import { isTypebotInSessionAtLeastV6 } from "./helpers/isTypebotInSessionAtLeastV6";
 import { parseVariablesInRichText } from "./parseBubbleBlock";
 import { parseDynamicTheme } from "./parseDynamicTheme";
 import { findPublicTypebot } from "./queries/findPublicTypebot";
 import { findResult } from "./queries/findResult";
 import { findTypebot } from "./queries/findTypebot";
-import { upsertResult } from "./queries/upsertResult";
-import {
-  type StartChatInput,
-  type StartChatResponse,
-  type StartPreviewChatInput,
-  type StartTypebot,
-  startTypebotSchema,
-} from "./schemas/api";
-import type { SessionState, TypebotInSession } from "./schemas/chatSession";
 import { startBotFlow } from "./startBotFlow";
+import { updateVariablesInSession } from "./updateVariablesInSession";
 
 type StartParams =
   | ({
@@ -59,12 +69,14 @@ type StartParams =
 
 type Props = {
   version: 1 | 2;
+  sessionStore: SessionStore;
   startParams: StartParams;
   initialSessionState?: Pick<SessionState, "whatsApp" | "expiryTimeout">;
 };
 
 export const startSession = async ({
   version,
+  sessionStore,
   startParams,
   initialSessionState,
 }: Props): Promise<
@@ -76,16 +88,11 @@ export const startSession = async ({
   }
 > => {
   const typebot = await getTypebot(startParams);
+  Sentry.setUser({ id: typebot.id });
 
-  const prefilledVariables = startParams.prefilledVariables
-    ? prefillVariables(typebot.variables, startParams.prefilledVariables)
-    : typebot.variables;
-
-  const result = await getResult({
+  const result = await getOrInitResult({
     resultId: startParams.type === "live" ? startParams.resultId : undefined,
     isPreview: startParams.type === "preview",
-    typebotId: typebot.id,
-    prefilledVariables,
     isRememberUserEnabled:
       typebot.settings.general?.rememberUser?.isEnabled ??
       (isDefined(typebot.settings.general?.isNewResultOnRefreshEnabled)
@@ -93,18 +100,22 @@ export const startSession = async ({
         : defaultSettings.general.rememberUser.isEnabled),
   });
 
-  const startVariables =
-    result && result.variables.length > 0
-      ? injectVariablesFromExistingResult(prefilledVariables, result.variables)
-      : prefilledVariables;
+  const startVariables = result
+    ? injectVariableValues({
+        variables: typebot.variables,
+        variablesWithValue: result.variables,
+      })
+    : typebot.variables;
 
   const typebotInSession = convertStartTypebotToTypebotInSession(
     typebot,
     startVariables,
   );
 
-  const initialState: SessionState = {
+  let initialState: SessionState = {
     version: "3",
+    workspaceId: typebot.workspaceId,
+    publicTypebotId: typebot.publicTypebotId,
     typebotsQueue: [
       {
         resultId: result?.id,
@@ -149,59 +160,52 @@ export const startSession = async ({
       : typebot.theme.general?.progressBar?.isEnabled
         ? { totalAnswers: 0 }
         : undefined,
-    setVariableIdsForHistory:
-      extractVariableIdsUsedForTranscript(typebotInSession),
+    setVariableIdsForHistory: extractVariableIdsUsedForTranscript(
+      typebotInSession,
+      { sessionStore },
+    ),
     ...initialSessionState,
   };
+
+  const setVariableHistory: SetVariableHistoryItem[] = [];
+
+  if (startParams.prefilledVariables) {
+    const firstBlockId = getFirstBlockId(typebotInSession);
+
+    const { updatedState, newSetVariableHistory } = updateVariablesInSession({
+      state: initialState,
+      newVariables: transformPrefilledVariablesToVariables(
+        startParams.prefilledVariables,
+        {
+          existingVariables: typebotInSession.variables,
+        },
+      ),
+      currentBlockId: firstBlockId,
+    });
+    initialState = updatedState;
+    setVariableHistory.push(...newSetVariableHistory);
+  }
 
   if (startParams.isOnlyRegistering) {
     return {
       newSessionState: initialState,
       typebot: {
         id: typebot.id,
-        settings: deepParseVariables(
-          initialState.typebotsQueue[0]?.typebot.variables,
-        )(typebot.settings),
+        version: typebot.version,
+        settings: deepParseVariables(typebot.settings, {
+          variables: initialState.typebotsQueue[0]?.typebot.variables,
+          sessionStore,
+        }),
         theme: sanitizeAndParseTheme(typebot.theme, {
           variables: initialState.typebotsQueue[0]?.typebot.variables,
+          sessionStore,
         }),
       },
-      dynamicTheme: parseDynamicTheme(initialState),
+      dynamicTheme: parseDynamicTheme({ state: initialState, sessionStore }),
       messages: [],
       visitedEdges: [],
-      setVariableHistory: [],
+      setVariableHistory,
     };
-  }
-
-  let chatReply = await startBotFlow({
-    version,
-    state: initialState,
-    startFrom:
-      startParams.type === "preview" ? startParams.startFrom : undefined,
-    startTime: Date.now(),
-    textBubbleContentFormat: startParams.textBubbleContentFormat,
-  });
-
-  // Has start message and has no messages to display first
-  if (
-    startParams.message &&
-    chatReply.messages.length === 0 &&
-    (chatReply.clientSideActions?.filter((c) => c.expectsDedicatedReply)
-      .length ?? 0) === 0
-  ) {
-    const resultId = chatReply.newSessionState.typebotsQueue[0].resultId;
-    if (resultId)
-      await upsertResult({
-        hasStarted: true,
-        isCompleted: false,
-        resultId,
-        typebot: chatReply.newSessionState.typebotsQueue[0].typebot,
-      });
-    chatReply = await continueBotFlow(startParams.message, {
-      version,
-      state: chatReply.newSessionState,
-      textBubbleContentFormat: startParams.textBubbleContentFormat,
-    });
   }
 
   const {
@@ -211,8 +215,16 @@ export const startSession = async ({
     newSessionState,
     logs,
     visitedEdges,
-    setVariableHistory,
-  } = chatReply;
+    setVariableHistory: newSetVariableHistory,
+  } = await startBotFlow({
+    version,
+    sessionStore,
+    message: startParams.message,
+    state: initialState,
+    startFrom: startParams.startFrom,
+    textBubbleContentFormat: startParams.textBubbleContentFormat,
+  });
+  setVariableHistory.push(...newSetVariableHistory);
 
   const clientSideActions = startFlowClientActions ?? [];
 
@@ -255,15 +267,18 @@ export const startSession = async ({
         clientSideActions.length > 0 ? clientSideActions : undefined,
       typebot: {
         id: typebot.id,
-        settings: deepParseVariables(
-          newSessionState.typebotsQueue[0].typebot.variables,
-        )(typebot.settings),
+        version: typebot.version,
+        settings: deepParseVariables(typebot.settings, {
+          variables: newSessionState.typebotsQueue[0].typebot.variables,
+          sessionStore,
+        }),
         theme: sanitizeAndParseTheme(typebot.theme, {
           variables: initialState.typebotsQueue[0].typebot.variables,
+          sessionStore,
         }),
         publishedAt: typebot.updatedAt,
       },
-      dynamicTheme: parseDynamicTheme(newSessionState),
+      dynamicTheme: parseDynamicTheme({ state: newSessionState, sessionStore }),
       logs: startLogs.length > 0 ? startLogs : undefined,
       visitedEdges,
       setVariableHistory,
@@ -274,11 +289,14 @@ export const startSession = async ({
     resultId: result?.id,
     typebot: {
       id: typebot.id,
-      settings: deepParseVariables(
-        newSessionState.typebotsQueue[0].typebot.variables,
-      )(typebot.settings),
+      version: typebot.version,
+      settings: deepParseVariables(typebot.settings, {
+        variables: newSessionState.typebotsQueue[0].typebot.variables,
+        sessionStore,
+      }),
       theme: sanitizeAndParseTheme(typebot.theme, {
         variables: initialState.typebotsQueue[0]?.typebot.variables,
+        sessionStore,
       }),
       publishedAt: typebot.updatedAt,
     },
@@ -286,14 +304,14 @@ export const startSession = async ({
     input,
     clientSideActions:
       clientSideActions.length > 0 ? clientSideActions : undefined,
-    dynamicTheme: parseDynamicTheme(newSessionState),
+    dynamicTheme: parseDynamicTheme({ state: newSessionState, sessionStore }),
     logs: startLogs.length > 0 ? startLogs : undefined,
     visitedEdges,
     setVariableHistory,
   };
 };
 
-const getTypebot = async (startParams: StartParams): Promise<StartTypebot> => {
+const getTypebot = async (startParams: StartParams) => {
   if (startParams.type === "preview" && startParams.typebot)
     return startParams.typebot;
 
@@ -318,9 +336,10 @@ const getTypebot = async (startParams: StartParams): Promise<StartTypebot> => {
   const parsedTypebot =
     typebotQuery && "typebot" in typebotQuery
       ? {
+          publicTypebotId: typebotQuery.id,
           id: typebotQuery.typebotId,
           ...omit(typebotQuery.typebot, "workspace"),
-          ...omit(typebotQuery, "typebot", "typebotId"),
+          ...omit(typebotQuery, "typebot", "typebotId", "id"),
         }
       : typebotQuery;
 
@@ -336,28 +355,30 @@ const getTypebot = async (startParams: StartParams): Promise<StartTypebot> => {
     (typebotQuery.typebot.workspace.isQuarantined ||
       typebotQuery.typebot.workspace.isSuspended);
 
-  if (
-    ("isClosed" in parsedTypebot && parsedTypebot.isClosed) ||
-    isQuarantinedOrSuspended
-  )
+  if (isQuarantinedOrSuspended)
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: defaultSystemMessages.botClosed,
+    });
+
+  if ("isClosed" in parsedTypebot && parsedTypebot.isClosed)
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "Typebot is closed",
+      message:
+        settingsSchema.parse(parsedTypebot.settings).general?.systemMessages
+          ?.botClosed ?? defaultSystemMessages.botClosed,
     });
 
   return startTypebotSchema.parse(parsedTypebot);
 };
 
-const getResult = async ({
+const getOrInitResult = async ({
   isPreview,
   resultId,
-  prefilledVariables,
   isRememberUserEnabled,
 }: {
   resultId: string | undefined;
   isPreview: boolean;
-  typebotId: string;
-  prefilledVariables: Variable[];
   isRememberUserEnabled: boolean;
 }) => {
   if (isPreview) return;
@@ -366,25 +387,11 @@ const getResult = async ({
       ? await findResult({ id: resultId })
       : undefined;
 
-  const prefilledVariableWithValue = prefilledVariables.filter(
-    (prefilledVariable) => isDefined(prefilledVariable.value),
-  );
-
-  const updatedResult = {
-    variables: prefilledVariableWithValue.concat(
-      existingResult?.variables.filter(
-        (resultVariable) =>
-          isDefined(resultVariable.value) &&
-          !prefilledVariableWithValue.some(
-            (prefilledVariable) =>
-              prefilledVariable.name === resultVariable.name,
-          ),
-      ) ?? [],
-    ) as VariableWithValue[],
-  };
   return {
     id: existingResult?.id ?? createId(),
-    variables: updatedResult.variables,
+    variables: existingResult?.variables
+      ? resultSchema.shape.variables.parse(existingResult.variables)
+      : undefined,
     answers: existingResult?.answers ?? [],
   };
 };
@@ -398,13 +405,19 @@ const parseDynamicThemeInState = (theme: Theme) => {
     (theme.chat?.guestAvatar?.isEnabled ?? defaultGuestAvatarIsEnabled)
       ? theme.chat?.guestAvatar?.url
       : undefined;
-  if (!hostAvatarUrl?.startsWith("{{") && !guestAvatarUrl?.startsWith("{{"))
+  const backgroundUrl = theme.general?.background?.content;
+  if (
+    !hostAvatarUrl?.startsWith("{{") &&
+    !guestAvatarUrl?.startsWith("{{") &&
+    !backgroundUrl?.startsWith("{{")
+  )
     return;
   return {
     hostAvatarUrl: hostAvatarUrl?.startsWith("{{") ? hostAvatarUrl : undefined,
     guestAvatarUrl: guestAvatarUrl?.startsWith("{{")
       ? guestAvatarUrl
       : undefined,
+    backgroundUrl: backgroundUrl?.startsWith("{{") ? backgroundUrl : undefined,
   };
 };
 
@@ -451,14 +464,21 @@ const parseStartClientSideAction = (
 
 const sanitizeAndParseTheme = (
   theme: Theme,
-  { variables }: { variables: Variable[] },
+  {
+    variables,
+    sessionStore,
+  }: { variables: Variable[]; sessionStore: SessionStore },
 ): Theme => ({
   general: theme.general
-    ? deepParseVariables(variables)(theme.general)
+    ? deepParseVariables(theme.general, { variables, sessionStore })
     : undefined,
-  chat: theme.chat ? deepParseVariables(variables)(theme.chat) : undefined,
+  chat: theme.chat
+    ? deepParseVariables(theme.chat, { variables, sessionStore })
+    : undefined,
   customCss: theme.customCss
-    ? removeLiteBadgeCss(parseVariables(variables)(theme.customCss))
+    ? removeLiteBadgeCss(
+        parseVariables(theme.customCss, { variables, sessionStore }),
+      )
     : undefined,
 });
 
@@ -470,46 +490,73 @@ const sanitizeAndParseHeadCode = (code: string) => {
 };
 
 const removeLiteBadgeCss = (code: string) => {
-  const liteBadgeCssRegex = /.*#lite-badge.*{[\s\S][^{]*}/gm;
-  return code.replace(liteBadgeCssRegex, "");
+  // Remove all comments
+  code = code.replace(/\/\*[\s\S]*?\*\//gm, "");
+
+  // Match any rule containing lite-badge, handling nested blocks
+  let prevCode;
+  do {
+    prevCode = code;
+    code = code.replace(
+      /([^{}]*)lite-badge[^{]*{[^{}]*}|[^{}]*lite-badge[^{]*{([^{}]*{[^{}]*})*[^{}]*}/gi,
+      "",
+    );
+  } while (code !== prevCode);
+
+  // Clean up any empty media queries or other nested rules
+  return code.replace(/@[^{]+{[\s]*}/gm, "");
 };
 
 const convertStartTypebotToTypebotInSession = (
   typebot: StartTypebot,
   startVariables: Variable[],
-): TypebotInSession =>
-  typebot.version === "6"
-    ? {
-        version: typebot.version,
-        id: typebot.id,
-        groups: typebot.groups,
-        edges: typebot.edges,
-        variables: startVariables,
-        events: typebot.events,
-      }
-    : {
-        version: typebot.version,
-        id: typebot.id,
-        groups: typebot.groups,
-        edges: typebot.edges,
-        variables: startVariables,
-        events: typebot.events,
-      };
+): TypebotInSession => {
+  const isAtLeastV6 = (typebot: StartTypebot): typebot is StartTypebotV6 =>
+    Number(typebot.version) >= 6;
+  if (isAtLeastV6(typebot)) {
+    return {
+      version: typebot.version,
+      id: typebot.id,
+      groups: typebot.groups,
+      edges: typebot.edges,
+      variables: startVariables,
+      events: typebot.events,
+      systemMessages: typebot.settings.general?.systemMessages,
+    };
+  }
+  return {
+    version: typebot.version,
+    id: typebot.id,
+    groups: typebot.groups,
+    edges: typebot.edges,
+    variables: startVariables,
+    events: typebot.events,
+    systemMessages: typebot.settings.general?.systemMessages,
+  } as TypebotInSessionV5; // I am not sure why, this needs to be casted, the discrimination does not work here
+};
 
 const extractVariableIdsUsedForTranscript = (
   typebot: TypebotInSession,
+  {
+    sessionStore,
+  }: {
+    sessionStore: SessionStore;
+  },
 ): string[] => {
   const variableIds: Set<string> = new Set();
   const parseVarParams = {
     variables: typebot.variables,
-    takeLatestIfList: typebot.version !== "6",
+    takeLatestIfList: !isTypebotInSessionAtLeastV6(typebot),
   };
   typebot.groups.forEach((group) => {
     group.blocks.forEach((block) => {
       if (block.type === BubbleBlockType.TEXT) {
         const { parsedVariableIds } = parseVariablesInRichText(
           block.content?.richText ?? [],
-          parseVarParams,
+          {
+            ...parseVarParams,
+            sessionStore,
+          },
         );
         parsedVariableIds.forEach((variableId) => variableIds.add(variableId));
       }
@@ -519,10 +566,10 @@ const extractVariableIdsUsedForTranscript = (
         block.type === BubbleBlockType.AUDIO
       ) {
         if (!block.content?.url) return;
-        const variablesInfo = getVariablesToParseInfoInText(
-          block.content.url,
-          parseVarParams,
-        );
+        const variablesInfo = getVariablesToParseInfoInText(block.content.url, {
+          ...parseVarParams,
+          sessionStore,
+        });
         variablesInfo.forEach((variableInfo) =>
           variableInfo.variableId
             ? variableIds.add(variableInfo.variableId ?? "")
@@ -536,7 +583,10 @@ const extractVariableIdsUsedForTranscript = (
             if (comparison.value) {
               const variableIdsInValue = getVariablesToParseInfoInText(
                 comparison.value,
-                parseVarParams,
+                {
+                  ...parseVarParams,
+                  sessionStore,
+                },
               );
               variableIdsInValue.forEach((variableInfo) => {
                 variableInfo.variableId
@@ -550,4 +600,19 @@ const extractVariableIdsUsedForTranscript = (
     });
   });
   return [...variableIds];
+};
+
+const getFirstBlockId = (typebot: TypebotInSession) => {
+  const firstEdgeId = getFirstEdgeId({
+    typebot,
+    startEventId: undefined,
+  });
+  const edge = typebot.edges.find((edge) => edge.id === firstEdgeId);
+  if (!edge) throw new Error("Edge not found");
+  const firstBlockId =
+    edge.to.blockId ??
+    typebot.groups.find((group) => group.id === edge.to.groupId)?.blocks.at(0)
+      ?.id;
+  if (!firstBlockId) throw new Error("First block not found");
+  return firstBlockId;
 };

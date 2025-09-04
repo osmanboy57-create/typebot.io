@@ -1,13 +1,13 @@
+import { ButtonLink } from "@/components/ButtonLink";
 import { BuoyIcon, ExternalLinkIcon } from "@/components/icons";
 import { TextInput } from "@/components/inputs";
 import { useEditor } from "@/features/editor/providers/EditorProvider";
 import { useTypebot } from "@/features/editor/providers/TypebotProvider";
-import { useToast } from "@/hooks/useToast";
-import { trpc } from "@/lib/trpc";
+import { trpc } from "@/lib/queryClient";
+import { toast } from "@/lib/toast";
 import {
   Alert,
   AlertIcon,
-  Button,
   HStack,
   Link,
   SlideFade,
@@ -15,7 +15,9 @@ import {
   type StackProps,
   Text,
 } from "@chakra-ui/react";
+import { useMutation } from "@tanstack/react-query";
 import { isEmpty } from "@typebot.io/lib/utils";
+import { Button } from "@typebot.io/ui/components/Button";
 import { type FormEvent, useState } from "react";
 import {
   getPhoneNumberFromLocalStorage,
@@ -24,7 +26,7 @@ import {
 
 export const WhatsAppPreviewInstructions = (props: StackProps) => {
   const { typebot, save } = useTypebot();
-  const { startPreviewAtGroup, startPreviewAtEvent } = useEditor();
+  const { startPreviewFrom } = useEditor();
   const [phoneNumber, setPhoneNumber] = useState(
     getPhoneNumberFromLocalStorage() ?? "",
   );
@@ -32,22 +34,22 @@ export const WhatsAppPreviewInstructions = (props: StackProps) => {
   const [isMessageSent, setIsMessageSent] = useState(false);
   const [hasMessageBeenSent, setHasMessageBeenSent] = useState(false);
 
-  const { showToast } = useToast();
-  const { mutate } = trpc.whatsApp.startWhatsAppPreview.useMutation({
-    onMutate: () => setIsSendingMessage(true),
-    onSettled: () => setIsSendingMessage(false),
-    onError: (error) => showToast({ description: error.message }),
-    onSuccess: async (data) => {
-      if (
-        data?.message === "success" &&
-        phoneNumber !== getPhoneNumberFromLocalStorage()
-      )
-        setPhoneNumberInLocalStorage(phoneNumber);
-      setHasMessageBeenSent(true);
-      setIsMessageSent(true);
-      setTimeout(() => setIsMessageSent(false), 30000);
-    },
-  });
+  const { mutate } = useMutation(
+    trpc.whatsApp.startWhatsAppPreview.mutationOptions({
+      onMutate: () => setIsSendingMessage(true),
+      onSettled: () => setIsSendingMessage(false),
+      onSuccess: async (data) => {
+        if (
+          data?.message === "success" &&
+          phoneNumber !== getPhoneNumberFromLocalStorage()
+        )
+          setPhoneNumberInLocalStorage(phoneNumber);
+        setHasMessageBeenSent(true);
+        setIsMessageSent(true);
+        setTimeout(() => setIsMessageSent(false), 30000);
+      },
+    }),
+  );
 
   const sendWhatsAppPreviewStartMessage = async (e: FormEvent) => {
     e.preventDefault();
@@ -56,11 +58,12 @@ export const WhatsAppPreviewInstructions = (props: StackProps) => {
     mutate({
       to: phoneNumber,
       typebotId: typebot.id,
-      startFrom: startPreviewAtGroup
-        ? { type: "group", groupId: startPreviewAtGroup }
-        : startPreviewAtEvent
-          ? { type: "event", eventId: startPreviewAtEvent }
-          : undefined,
+      startFrom:
+        startPreviewFrom?.type === "group"
+          ? { type: "group", groupId: startPreviewFrom.id }
+          : startPreviewFrom?.type === "event"
+            ? { type: "event", eventId: startPreviewFrom.id }
+            : undefined,
     });
   };
 
@@ -76,14 +79,14 @@ export const WhatsAppPreviewInstructions = (props: StackProps) => {
     >
       <HStack justifyContent="flex-end">
         <Text fontSize="sm">Need help?</Text>
-        <Button
-          as={Link}
+        <ButtonLink
           href="https://docs.typebot.io/deploy/whatsapp/overview"
-          leftIcon={<BuoyIcon />}
           size="sm"
+          variant="secondary"
         >
+          <BuoyIcon />
           Check the docs
-        </Button>
+        </ButtonLink>
       </HStack>
       <TextInput
         label="Your phone number"
@@ -96,30 +99,23 @@ export const WhatsAppPreviewInstructions = (props: StackProps) => {
       />
       {!isMessageSent && (
         <Button
-          isDisabled={isEmpty(phoneNumber) || isMessageSent}
-          isLoading={isSendingMessage}
+          disabled={isEmpty(phoneNumber) || isMessageSent || isSendingMessage}
           type="submit"
-          colorScheme="blue"
         >
           {hasMessageBeenSent ? "Restart" : "Start"} the chat
         </Button>
       )}
       <SlideFade offsetY="20px" in={isMessageSent} unmountOnExit>
         <Stack>
-          <Button
-            as={Link}
-            href={`https://web.whatsapp.com/`}
-            isExternal
-            colorScheme="blue"
-            rightIcon={<ExternalLinkIcon />}
-          >
+          <ButtonLink href={`https://web.whatsapp.com/`} target="_blank">
             Open WhatsApp Web
-          </Button>
+            <ExternalLinkIcon />
+          </ButtonLink>
           <Alert status="success" w="100%">
             <HStack>
               <AlertIcon />
               <Stack spacing={1}>
-                <Text fontWeight="semibold">Chat started!</Text>
+                <Text fontWeight="medium">Chat started!</Text>
                 <Text fontSize="sm">
                   The first message can take up to 2 min to be delivered.
                 </Text>

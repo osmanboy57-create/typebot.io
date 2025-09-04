@@ -1,6 +1,6 @@
 import { MinusIcon, PlusIcon } from "@/components/icons";
-import { headerHeight } from "@/features/editor/constants";
-import { IconButton, Stack, useColorModeValue } from "@chakra-ui/react";
+import { Stack, useColorModeValue } from "@chakra-ui/react";
+import { Button } from "@typebot.io/ui/components/Button";
 
 type Props = {
   onZoomInClick: () => void;
@@ -10,31 +10,24 @@ export const ZoomButtons = ({
   onZoomInClick: onZoomIn,
   onZoomOutClick: onZoomOut,
 }: Props) => (
-  <Stack
-    pos="fixed"
-    top={`calc(${headerHeight}px + 70px)`}
-    right="40px"
-    bgColor={useColorModeValue("white", "gray.900")}
-    rounded="md"
-    zIndex={1}
-    spacing="0"
-    shadow="lg"
-  >
-    <IconButton
-      icon={<PlusIcon />}
+  <Stack spacing="0" shadow="md" rounded="md">
+    <Button
       aria-label={"Zoom in"}
-      size="sm"
+      size="icon"
       onClick={onZoomIn}
-      bgColor={useColorModeValue("white", undefined)}
-      borderBottomRadius={0}
-    />
-    <IconButton
-      icon={<MinusIcon />}
+      className="rounded-b-none size-8 bg-gray-1"
+      variant="ghost"
+    >
+      <PlusIcon />
+    </Button>
+    <Button
       aria-label={"Zoom out"}
-      size="sm"
+      size="icon"
       onClick={onZoomOut}
-      bgColor={useColorModeValue("white", undefined)}
-      borderTopRadius={0}
-    />
+      className="rounded-t-none size-8 bg-gray-1"
+      variant="ghost"
+    >
+      <MinusIcon />
+    </Button>
   </Stack>
 );

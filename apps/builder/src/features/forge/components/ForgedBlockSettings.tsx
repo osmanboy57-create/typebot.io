@@ -3,8 +3,9 @@ import type { BlockOptions } from "@typebot.io/blocks-core/schemas/schema";
 import type { ForgedBlock } from "@typebot.io/forge-repository/schemas";
 import { useState } from "react";
 import { useForgedBlock } from "../hooks/useForgedBlock";
-import { CreateForgedCredentialsModal } from "./credentials/CreateForgedCredentialsModal";
+import { ForgedCredentialsCreateDialog } from "./credentials/ForgedCredentialsCreateDialog";
 import { ForgedCredentialsDropdown } from "./credentials/ForgedCredentialsDropdown";
+import { ForgedOAuthCredentialsCreateDialog } from "./credentials/ForgedOAuthCredentialsCreateDialog";
 import { ZodActionDiscriminatedUnion } from "./zodLayouts/ZodActionDiscriminatedUnion";
 import { ZodObjectLayout } from "./zodLayouts/ZodObjectLayout";
 
@@ -14,10 +15,10 @@ type Props = {
 };
 export const ForgedBlockSettings = ({ block, onOptionsChange }: Props) => {
   const [keySuffix, setKeySuffix] = useState<number>(0);
-  const { blockDef, blockSchema, actionDef } = useForgedBlock(
-    block.type,
-    block.options?.action,
-  );
+  const { blockDef, blockSchema, actionDef } = useForgedBlock({
+    nodeType: block.type,
+    action: block.options?.action,
+  });
   const { isOpen, onOpen, onClose } = useDisclosure();
 
   const updateCredentialsId = (credentialsId?: string) => {
@@ -27,7 +28,6 @@ export const ForgedBlockSettings = ({ block, onOptionsChange }: Props) => {
     });
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const resetOptionsAction = (updates: any) => {
     if (!actionDef) return;
     const actionOptionsKeys = Object.keys(actionDef.options?.shape ?? []);
@@ -48,7 +48,6 @@ export const ForgedBlockSettings = ({ block, onOptionsChange }: Props) => {
     setKeySuffix((prev) => prev + 1);
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateOptions = (updates: any) => {
     const isChangingAction =
       actionDef && updates?.action && updates.action !== block.options.action;
@@ -64,13 +63,26 @@ export const ForgedBlockSettings = ({ block, onOptionsChange }: Props) => {
     <Stack spacing={4}>
       {blockDef.auth && (
         <>
-          <CreateForgedCredentialsModal
-            blockDef={blockDef}
-            isOpen={isOpen}
-            onClose={onClose}
-            onNewCredentials={updateCredentialsId}
-          />
+          {blockDef.auth.type === "oauth" ? (
+            <ForgedOAuthCredentialsCreateDialog
+              scope="workspace"
+              blockDef={blockDef}
+              isOpen={isOpen}
+              onClose={onClose}
+              onNewCredentials={updateCredentialsId}
+            />
+          ) : (
+            <ForgedCredentialsCreateDialog
+              scope="workspace"
+              blockDef={blockDef}
+              isOpen={isOpen}
+              onClose={onClose}
+              onNewCredentials={updateCredentialsId}
+            />
+          )}
+
           <ForgedCredentialsDropdown
+            scope="workspace"
             key={block.options?.credentialsId ?? "none"}
             blockDef={blockDef}
             currentCredentialsId={block.options?.credentialsId}

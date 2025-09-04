@@ -1,5 +1,6 @@
-import { useToast } from "@/hooks/useToast";
-import { trpc } from "@/lib/trpc";
+import { trpc } from "@/lib/queryClient";
+import { toast } from "@/lib/toast";
+import { useQuery } from "@tanstack/react-query";
 import { LogicBlockType } from "@typebot.io/blocks-logic/constants";
 import { isDefined } from "@typebot.io/lib/utils";
 import { convertResultsToTableData } from "@typebot.io/results/convertResultsToTableData";
@@ -28,7 +29,6 @@ const resultsContext = createContext<{
   onDeleteResults: (totalResultsDeleted: number) => void;
   fetchNextPage: () => void;
   refetchResults: () => void;
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   //@ts-ignore
 }>({});
 
@@ -46,13 +46,9 @@ export const ResultsProvider = ({
   onDeleteResults: (totalResultsDeleted: number) => void;
 }) => {
   const { publishedTypebot } = useTypebot();
-  const { showToast } = useToast();
   const { data, fetchNextPage, hasNextPage, refetch } = useResultsQuery({
     timeFilter,
     typebotId,
-    onError: (error) => {
-      showToast({ description: error });
-    },
   });
 
   const linkedTypebotIds =
@@ -68,13 +64,15 @@ export const ResultsProvider = ({
           : typebotIds;
       }, []) ?? [];
 
-  const { data: linkedTypebotsData } = trpc.getLinkedTypebots.useQuery(
-    {
-      typebotId,
-    },
-    {
-      enabled: linkedTypebotIds.length > 0,
-    },
+  const { data: linkedTypebotsData } = useQuery(
+    trpc.getLinkedTypebots.queryOptions(
+      {
+        typebotId,
+      },
+      {
+        enabled: linkedTypebotIds.length > 0,
+      },
+    ),
   );
 
   const flatResults = useMemo(

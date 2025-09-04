@@ -14,12 +14,14 @@ export const choiceInputOptionsSchema = optionBaseSchema.merge(
     dynamicVariableId: z.string().optional(),
     isSearchable: z.boolean().optional(),
     searchInputPlaceholder: z.string().optional(),
+    areInitialSearchButtonsVisible: z.boolean().optional(),
   }),
 );
 
 export const buttonItemSchemas = {
   v5: itemBaseSchemas.v5.extend({
     content: z.string().optional(),
+    value: z.string().optional(),
     displayCondition: z
       .object({
         isEnabled: z.boolean().optional(),
@@ -29,6 +31,7 @@ export const buttonItemSchemas = {
   }),
   v6: itemBaseSchemas.v6.extend({
     content: z.string().optional(),
+    value: z.string().optional(),
     displayCondition: z
       .object({
         isEnabled: z.boolean().optional(),

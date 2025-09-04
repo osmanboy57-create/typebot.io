@@ -1,20 +1,15 @@
-import { EditIcon, MoreHorizontalIcon, TrashIcon } from "@/components/icons";
-import { colors } from "@/lib/theme";
-import { trpc } from "@/lib/trpc";
+import { MoreHorizontalIcon } from "@/components/icons";
+import { queryClient, trpc } from "@/lib/queryClient";
 import {
   Box,
   Flex,
   HStack,
-  IconButton,
   Image,
-  Menu,
-  MenuButton,
-  MenuItem,
-  MenuList,
   Stack,
   Text,
   useColorModeValue,
 } from "@chakra-ui/react";
+import { useMutation } from "@tanstack/react-query";
 import { useTranslate } from "@tolgee/react";
 import {
   BackgroundType,
@@ -26,6 +21,11 @@ import {
   defaultHostBubblesBackgroundColor,
 } from "@typebot.io/theme/constants";
 import type { Theme, ThemeTemplate } from "@typebot.io/theme/schemas";
+import type { TypebotV6 } from "@typebot.io/typebot/schemas/typebot";
+import { colors } from "@typebot.io/ui/chakraTheme";
+import { Menu } from "@typebot.io/ui/components/Menu";
+import { EditIcon } from "@typebot.io/ui/icons/EditIcon";
+import { TrashIcon } from "@typebot.io/ui/icons/TrashIcon";
 import { useState } from "react";
 import { DefaultAvatar } from "./DefaultAvatar";
 
@@ -33,11 +33,13 @@ export const ThemeTemplateCard = ({
   workspaceId,
   themeTemplate,
   isSelected,
+  typebotVersion,
   onClick,
   onRenameClick,
   onDeleteSuccess,
 }: {
   workspaceId: string;
+  typebotVersion: TypebotV6["version"];
   themeTemplate: Pick<ThemeTemplate, "name" | "theme" | "id">;
   isSelected: boolean;
   onRenameClick?: () => void;
@@ -48,19 +50,18 @@ export const ThemeTemplateCard = ({
   const borderWidth = useColorModeValue(undefined, "1px");
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const {
-    theme: {
-      listThemeTemplates: { refetch: refetchThemeTemplates },
-    },
-  } = trpc.useContext();
-  const { mutate } = trpc.theme.deleteThemeTemplate.useMutation({
-    onMutate: () => setIsDeleting(true),
-    onSettled: () => setIsDeleting(false),
-    onSuccess: () => {
-      refetchThemeTemplates();
-      if (onDeleteSuccess) onDeleteSuccess();
-    },
-  });
+  const { mutate } = useMutation(
+    trpc.theme.deleteThemeTemplate.mutationOptions({
+      onMutate: () => setIsDeleting(true),
+      onSettled: () => setIsDeleting(false),
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: trpc.theme.listThemeTemplates.queryKey(),
+        });
+        if (onDeleteSuccess) onDeleteSuccess();
+      },
+    }),
+  );
 
   const deleteThemeTemplate = () => {
     mutate({ themeTemplateId: themeTemplate.id, workspaceId });
@@ -82,7 +83,7 @@ export const ThemeTemplateCard = ({
 
   const hostBubbleBgColor =
     themeTemplate.theme.chat?.hostBubbles?.backgroundColor ??
-    defaultHostBubblesBackgroundColor;
+    defaultHostBubblesBackgroundColor[typebotVersion];
 
   const guestAvatar = {
     isEnabled:
@@ -93,11 +94,11 @@ export const ThemeTemplateCard = ({
 
   const guestBubbleBgColor =
     themeTemplate.theme.chat?.guestBubbles?.backgroundColor ??
-    defaultGuestBubblesBackgroundColor;
+    defaultGuestBubblesBackgroundColor[typebotVersion];
 
   const buttonBgColor =
     themeTemplate.theme.chat?.buttons?.backgroundColor ??
-    defaultButtonsBackgroundColor;
+    defaultButtonsBackgroundColor[typebotVersion];
 
   return (
     <Stack
@@ -110,8 +111,8 @@ export const ThemeTemplateCard = ({
       rounded="md"
       boxShadow={
         isSelected
-          ? `${colors["blue"]["400"]} 0 0 0 4px`
-          : `rgba(0, 0, 0, 0.08) 0px 2px 4px`
+          ? `${colors["orange"]["400"]} 0 0 0 2px`
+          : `rgba(0, 0, 0, 0.08) 0px 2px 2px`
       }
       style={{
         willChange: "box-shadow",
@@ -122,7 +123,7 @@ export const ThemeTemplateCard = ({
         borderTopRadius="md"
         backgroundSize="cover"
         {...parseBackground(themeTemplate.theme.general?.background)}
-        borderColor={isSelected ? "blue.400" : undefined}
+        borderColor={isSelected ? "orange.400" : undefined}
       >
         <HStack mt="4" ml="4" spacing={0.5} alignItems="flex-end">
           <AvatarPreview avatar={hostAvatar} />
@@ -163,32 +164,31 @@ export const ThemeTemplateCard = ({
           {themeTemplate.name}
         </Text>
         {onDeleteSuccess && onRenameClick && (
-          <Menu isLazy>
-            <MenuButton
-              as={IconButton}
-              icon={<MoreHorizontalIcon />}
+          <Menu.Root>
+            <Menu.TriggerButton
               aria-label={t(
                 "theme.sideMenu.template.myTemplates.menu.ariaLabel",
               )}
-              variant="ghost"
-              size="xs"
+              variant="outline-secondary"
+              size="icon"
+              className="size-7"
               onClick={(e) => e.stopPropagation()}
-            />
-            <MenuList onClick={(e) => e.stopPropagation()}>
+            >
+              <MoreHorizontalIcon />
+            </Menu.TriggerButton>
+            <Menu.Popup align="end">
               {isSelected && (
-                <MenuItem icon={<EditIcon />} onClick={onRenameClick}>
+                <Menu.Item onClick={onRenameClick}>
+                  <EditIcon />
                   {t("rename")}
-                </MenuItem>
+                </Menu.Item>
               )}
-              <MenuItem
-                icon={<TrashIcon />}
-                color="red.500"
-                onClick={deleteThemeTemplate}
-              >
+              <Menu.Item className="text-red-10" onClick={deleteThemeTemplate}>
+                <TrashIcon />
                 {t("delete")}
-              </MenuItem>
-            </MenuList>
-          </Menu>
+              </Menu.Item>
+            </Menu.Popup>
+          </Menu.Root>
         )}
       </HStack>
     </Stack>

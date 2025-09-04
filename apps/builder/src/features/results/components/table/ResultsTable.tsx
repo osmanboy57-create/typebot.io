@@ -1,11 +1,9 @@
 import { AlignLeftTextIcon } from "@/components/icons";
-import { TimeFilterDropdown } from "@/features/analytics/components/TimeFilterDropdown";
+import { TimeFilterSelect } from "@/features/analytics/components/TimeFilterSelect";
 import type { timeFilterValues } from "@/features/analytics/constants";
 import { useTypebot } from "@/features/editor/providers/TypebotProvider";
-import { colors } from "@/lib/theme";
 import {
   Box,
-  Button,
   HStack,
   Stack,
   Text,
@@ -25,6 +23,8 @@ import type {
   TableData,
 } from "@typebot.io/results/schemas/results";
 import type { ResultsTablePreferences } from "@typebot.io/typebot/schemas/typebot";
+import { colors } from "@typebot.io/ui/chakraTheme";
+import { Button } from "@typebot.io/ui/components/Button";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { HeaderIcon } from "../HeaderIcon";
 import { HeaderRow } from "./HeaderRow";
@@ -60,7 +60,6 @@ export const ResultsTable = ({
   const background = useColorModeValue("white", colors.gray[900]);
   const { updateTypebot, currentUserMode } = useTypebot();
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
-  const [isTableScrolled, setIsTableScrolled] = useState(false);
   const bottomElement = useRef<HTMLDivElement | null>(null);
   const tableWrapper = useRef<HTMLDivElement | null>(null);
 
@@ -170,7 +169,11 @@ export const ResultsTable = ({
           </HStack>
         ),
         cell: ({ row }) => (
-          <Button size="sm" onClick={onLogOpenIndex(row.index)}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onLogOpenIndex(row.index)}
+          >
             See logs
           </Button>
         ),
@@ -228,10 +231,10 @@ export const ResultsTable = ({
             onClearSelection={() => setRowSelection({})}
           />
         )}
-        <TimeFilterDropdown
+        <TimeFilterSelect
+          size="sm"
           timeFilter={timeFilter}
           onTimeFilterChange={onTimeFilterChange}
-          size="sm"
         />
         <TableSettingsButton
           resultHeader={resultHeader}
@@ -241,28 +244,11 @@ export const ResultsTable = ({
           onColumnOrderChange={changeColumnOrder}
         />
       </HStack>
-      <Box
-        ref={tableWrapper}
-        overflow="auto"
-        rounded="md"
-        data-testid="results-table"
-        backgroundImage={`linear-gradient(to right, ${background}, ${background}), linear-gradient(to right, ${background}, ${background}),linear-gradient(to right, rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0)),linear-gradient(to left, rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0));`}
-        backgroundPosition="left center, right center, left center, right center"
-        backgroundRepeat="no-repeat"
-        backgroundSize="30px 100%, 30px 100%, 15px 100%, 15px 100%"
-        backgroundAttachment="local, local, scroll, scroll"
-        onScroll={(e) =>
-          setIsTableScrolled((e.target as HTMLElement).scrollTop > 0)
-        }
-      >
-        <chakra.table rounded="md">
+      <Box ref={tableWrapper} overflow="auto" data-testid="results-table">
+        <chakra.table background={background}>
           <thead>
             {instance.getHeaderGroups().map((headerGroup) => (
-              <HeaderRow
-                key={headerGroup.id}
-                headerGroup={headerGroup}
-                isTableScrolled={isTableScrolled}
-              />
+              <HeaderRow key={headerGroup.id} headerGroup={headerGroup} />
             ))}
           </thead>
 

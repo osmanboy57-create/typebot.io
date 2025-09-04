@@ -2,13 +2,14 @@ import type { BubbleProps } from "./features/bubble/components/Bubble";
 import { close } from "./features/commands/utils/close";
 import { hidePreviewMessage } from "./features/commands/utils/hidePreviewMessage";
 import { open } from "./features/commands/utils/open";
+import { sendCommand } from "./features/commands/utils/sendCommand";
 import { setInputValue } from "./features/commands/utils/setInputValue";
 import { setPrefilledVariables } from "./features/commands/utils/setPrefilledVariables";
 import { showPreviewMessage } from "./features/commands/utils/showPreviewMessage";
 import { toggle } from "./features/commands/utils/toggle";
 import { unmount } from "./features/commands/utils/unmount";
 import type { PopupProps } from "./features/popup/components/Popup";
-import type { BotProps } from "./index";
+import { type BotProps, reload } from "./index";
 
 export const initStandard = (props: BotProps & { id?: string }) => {
   const standardElement = props.id
@@ -31,26 +32,6 @@ export const initBubble = (props: BubbleProps) => {
   document.body.prepend(bubbleElement);
 };
 
-type Typebot = {
-  initStandard: typeof initStandard;
-  initPopup: typeof initPopup;
-  initBubble: typeof initBubble;
-  close: typeof close;
-  hidePreviewMessage: typeof hidePreviewMessage;
-  open: typeof open;
-  setPrefilledVariables: typeof setPrefilledVariables;
-  showPreviewMessage: typeof showPreviewMessage;
-  toggle: typeof toggle;
-  setInputValue: typeof setInputValue;
-  unmount: typeof unmount;
-};
-
-declare const window:
-  | {
-      Typebot: Typebot | undefined;
-    }
-  | undefined;
-
 export const parseTypebot = () => ({
   initStandard,
   initPopup,
@@ -63,7 +44,17 @@ export const parseTypebot = () => ({
   toggle,
   setInputValue,
   unmount,
+  sendCommand,
+  reload,
 });
+
+type Typebot = ReturnType<typeof parseTypebot>;
+
+declare const window:
+  | {
+      Typebot: Typebot;
+    }
+  | undefined;
 
 export const injectTypebotInWindow = (typebot: Typebot) => {
   if (typeof window === "undefined") return;

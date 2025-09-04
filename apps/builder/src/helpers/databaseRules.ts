@@ -7,6 +7,7 @@ import {
   WorkspaceRole,
 } from "@typebot.io/prisma/enum";
 import type { Prisma } from "@typebot.io/prisma/types";
+import type { User } from "@typebot.io/user/schemas";
 import type { NextApiResponse } from "next";
 
 export const canWriteTypebots = (
@@ -49,7 +50,7 @@ export const canReadTypebots = (
         },
 });
 
-export const canEditGuests = (user: Prisma.User, typebotId: string) => ({
+export const canEditGuests = (user: Pick<User, "id">, typebotId: string) => ({
   id: typebotId,
   workspace: {
     members: {

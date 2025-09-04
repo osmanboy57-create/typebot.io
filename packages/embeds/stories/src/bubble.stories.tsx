@@ -3,6 +3,9 @@ import {
   close,
   hidePreviewMessage,
   open,
+  reload,
+  reset,
+  sendCommand,
   setInputValue,
   setPrefilledVariables,
   showPreviewMessage,
@@ -19,11 +22,14 @@ export const Default = () => {
         <button onClick={toggle}>Toggle chat window</button>
         <button onClick={open}>Open chat window</button>
         <button onClick={close}>Close chat window</button>
+        <button onClick={reload}>Reload chat</button>
         <button onClick={() => showPreviewMessage()}>
           Show Preview Message
         </button>
         <button onClick={() => setInputValue("YOOOO!")}>Set input value</button>
         <button onClick={hidePreviewMessage}>Close Preview Message</button>
+        <button onClick={() => reset()}>Reset chat</button>
+        <button onClick={() => sendCommand("wizz")}>Send command</button>
         <div>
           <p>Predefined name:</p>
           <input value={name} onChange={(e) => setName(e.target.value)} />
@@ -31,27 +37,27 @@ export const Default = () => {
             Set predefined name
           </button>
         </div>
+        <Bubble
+          typebot="lead-generation-ybslz4j"
+          apiHost="http://localhost:3001"
+          wsHost="localhost:1999"
+          prefilledVariables={{
+            Name: "John",
+          }}
+          previewMessage={{
+            avatarUrl: "https://avatars.githubusercontent.com/u/16015833?v=4",
+            message: "Hello, I am a preview message",
+            autoShowDelay: 3000,
+          }}
+          theme={{
+            button: {
+              customIconSrc:
+                "https://avatars.githubusercontent.com/u/16015833?v=4",
+            },
+          }}
+          // isPreview
+        />
       </div>
-
-      <Bubble
-        typebot={"my-typebot-2b532x1"}
-        apiHost="http://localhost:3001"
-        prefilledVariables={{
-          Name: ["John"],
-        }}
-        previewMessage={{
-          avatarUrl: "https://avatars.githubusercontent.com/u/16015833?v=4",
-          message: "Hello, I am a preview message",
-          autoShowDelay: 3000,
-        }}
-        theme={{
-          button: {
-            backgroundColor: "#FF7537",
-            iconColor: "white",
-          },
-        }}
-        // isPreview
-      />
     </div>
   );
 };

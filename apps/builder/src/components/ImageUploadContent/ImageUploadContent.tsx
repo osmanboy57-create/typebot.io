@@ -1,6 +1,7 @@
 import type { FilePathUploadProps } from "@/features/upload/api/generateUploadUrl";
-import { Button, Flex, HStack, Stack } from "@chakra-ui/react";
+import { Flex, HStack, Stack } from "@chakra-ui/react";
 import { useTranslate } from "@tolgee/react";
+import { Button } from "@typebot.io/ui/components/Button";
 import { useState } from "react";
 import { TextInput } from "../inputs/TextInput";
 import { GiphyPicker } from "./GiphyPicker";
@@ -9,7 +10,9 @@ import { UnsplashPicker } from "./UnsplashPicker";
 import { UploadButton } from "./UploadButton";
 import { EmojiSearchableList } from "./emoji/EmojiSearchableList";
 
-type Tabs = "link" | "upload" | "giphy" | "emoji" | "unsplash" | "icon";
+type PermanentTabs = "link" | "upload";
+type AdditionalTabs = "giphy" | "emoji" | "unsplash" | "icon";
+type Tabs = PermanentTabs | AdditionalTabs;
 
 type Props = {
   uploadFileProps: FilePathUploadProps | undefined;
@@ -17,25 +20,11 @@ type Props = {
   imageSize?: "small" | "regular" | "thumb";
   initialTab?: Tabs;
   linkWithVariableButton?: boolean;
+  additionalTabs?: Partial<Record<AdditionalTabs, boolean>>;
+  onDelete?: () => void;
   onSubmit: (url: string) => void;
   onClose?: () => void;
-} & (
-  | {
-      includedTabs?: Tabs[];
-    }
-  | {
-      excludedTabs?: Tabs[];
-    }
-);
-
-const defaultDisplayedTabs: Tabs[] = [
-  "link",
-  "upload",
-  "giphy",
-  "emoji",
-  "unsplash",
-  "icon",
-];
+};
 
 export const ImageUploadContent = ({
   uploadFileProps,
@@ -45,20 +34,19 @@ export const ImageUploadContent = ({
   onClose,
   initialTab,
   linkWithVariableButton,
-  ...props
+  additionalTabs,
+  onDelete,
 }: Props) => {
-  const includedTabs =
-    "includedTabs" in props
-      ? (props.includedTabs ?? defaultDisplayedTabs)
-      : defaultDisplayedTabs;
-  const excludedTabs =
-    "excludedTabs" in props ? (props.excludedTabs ?? []) : [];
-  const displayedTabs = defaultDisplayedTabs.filter(
-    (tab) => !excludedTabs.includes(tab) && includedTabs.includes(tab),
-  );
+  const displayedTabs = [
+    "link",
+    "upload",
+    ...Object.keys(additionalTabs ?? {}).filter(
+      (tab) => additionalTabs?.[tab as AdditionalTabs],
+    ),
+  ];
 
   const [currentTab, setCurrentTab] = useState<Tabs>(
-    initialTab ?? displayedTabs[0],
+    initialTab ?? (displayedTabs[0] as Tabs),
   );
 
   const handleSubmit = (url: string) => {
@@ -71,7 +59,7 @@ export const ImageUploadContent = ({
       <HStack>
         {displayedTabs.includes("link") && (
           <Button
-            variant={currentTab === "link" ? "solid" : "ghost"}
+            variant={currentTab === "link" ? "outline" : "ghost"}
             onClick={() => setCurrentTab("link")}
             size="sm"
           >
@@ -80,7 +68,7 @@ export const ImageUploadContent = ({
         )}
         {displayedTabs.includes("upload") && (
           <Button
-            variant={currentTab === "upload" ? "solid" : "ghost"}
+            variant={currentTab === "upload" ? "outline" : "ghost"}
             onClick={() => setCurrentTab("upload")}
             size="sm"
           >
@@ -89,7 +77,7 @@ export const ImageUploadContent = ({
         )}
         {displayedTabs.includes("emoji") && (
           <Button
-            variant={currentTab === "emoji" ? "solid" : "ghost"}
+            variant={currentTab === "emoji" ? "outline" : "ghost"}
             onClick={() => setCurrentTab("emoji")}
             size="sm"
           >
@@ -98,7 +86,7 @@ export const ImageUploadContent = ({
         )}
         {displayedTabs.includes("giphy") && (
           <Button
-            variant={currentTab === "giphy" ? "solid" : "ghost"}
+            variant={currentTab === "giphy" ? "outline" : "ghost"}
             onClick={() => setCurrentTab("giphy")}
             size="sm"
           >
@@ -107,7 +95,7 @@ export const ImageUploadContent = ({
         )}
         {displayedTabs.includes("unsplash") && (
           <Button
-            variant={currentTab === "unsplash" ? "solid" : "ghost"}
+            variant={currentTab === "unsplash" ? "outline" : "ghost"}
             onClick={() => setCurrentTab("unsplash")}
             size="sm"
           >
@@ -116,7 +104,7 @@ export const ImageUploadContent = ({
         )}
         {displayedTabs.includes("icon") && (
           <Button
-            variant={currentTab === "icon" ? "solid" : "ghost"}
+            variant={currentTab === "icon" ? "outline" : "ghost"}
             onClick={() => setCurrentTab("icon")}
             size="sm"
           >
@@ -132,6 +120,7 @@ export const ImageUploadContent = ({
         onSubmit={handleSubmit}
         defaultUrl={defaultUrl}
         linkWithVariableButton={linkWithVariableButton}
+        onDelete={onDelete}
       />
     </Stack>
   );
@@ -144,6 +133,7 @@ const BodyContent = ({
   imageSize,
   linkWithVariableButton,
   onSubmit,
+  onDelete,
 }: {
   uploadFileProps?: FilePathUploadProps;
   tab: Tabs;
@@ -151,6 +141,7 @@ const BodyContent = ({
   imageSize: "small" | "regular" | "thumb";
   linkWithVariableButton?: boolean;
   onSubmit: (url: string) => void;
+  onDelete?: () => void;
 }) => {
   switch (tab) {
     case "upload": {
@@ -168,6 +159,7 @@ const BodyContent = ({
           defaultUrl={defaultUrl}
           onNewUrl={onSubmit}
           withVariableButton={linkWithVariableButton}
+          onDelete={onDelete}
         />
       );
     case "giphy":
@@ -195,7 +187,6 @@ const UploadFileContent = ({
         fileType="image"
         filePathProps={uploadFileProps}
         onFileUploaded={onNewUrl}
-        colorScheme="blue"
       >
         {t("editor.header.uploadTab.uploadButton.label")}
       </UploadButton>
@@ -207,7 +198,12 @@ const EmbedLinkContent = ({
   defaultUrl,
   onNewUrl,
   withVariableButton,
-}: ContentProps & { defaultUrl?: string; withVariableButton?: boolean }) => {
+  onDelete,
+}: ContentProps & {
+  defaultUrl?: string;
+  withVariableButton?: boolean;
+  onDelete?: () => void;
+}) => {
   const { t } = useTranslate();
 
   return (
@@ -217,6 +213,11 @@ const EmbedLinkContent = ({
         onChange={onNewUrl}
         defaultValue={defaultUrl ?? ""}
         withVariableButton={withVariableButton}
+        onKeyDown={(e) => {
+          if (e.key === "Backspace" && e.currentTarget.value === "") {
+            onDelete?.();
+          }
+        }}
       />
     </Stack>
   );

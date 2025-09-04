@@ -1,62 +1,56 @@
 import { useTypebot } from "@/features/editor/providers/TypebotProvider";
-import { colors } from "@/lib/theme";
-import { Portal, useColorMode, useDisclosure } from "@chakra-ui/react";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { useColorMode } from "@chakra-ui/react";
 import type { Edge as EdgeProps } from "@typebot.io/typebot/schemas/edge";
+import { colors } from "@typebot.io/ui/chakraTheme";
+import { ContextMenu } from "@typebot.io/ui/components/ContextMenu";
+import { TrashIcon } from "@typebot.io/ui/icons/TrashIcon";
 import type React from "react";
 import { useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { eventWidth, groupWidth } from "../../constants";
 import { computeEdgePath } from "../../helpers/computeEdgePath";
 import { getAnchorsPosition } from "../../helpers/getAnchorsPosition";
-import { useGroupsStore } from "../../hooks/useGroupsStore";
+import { useSelectionStore } from "../../hooks/useSelectionStore";
 import { useEndpoints } from "../../providers/EndpointsProvider";
-import { useEventsCoordinates } from "../../providers/EventsCoordinateProvider";
 import { useGraph } from "../../providers/GraphProvider";
-import { EdgeMenu } from "./EdgeMenu";
 
 type Props = {
   edge: EdgeProps;
-  fromGroupId: string | undefined;
+  fromElementId: string | undefined;
 };
 
-export const Edge = ({ edge, fromGroupId }: Props) => {
+export const Edge = ({ edge, fromElementId }: Props) => {
   const isDark = useColorMode().colorMode === "dark";
   const { deleteEdge } = useTypebot();
   const { previewingEdge, graphPosition, isReadOnly, setPreviewingEdge } =
     useGraph();
   const { sourceEndpointYOffsets, targetEndpointYOffsets } = useEndpoints();
-  const fromGroupCoordinates = useGroupsStore(
+  const fromElementCoordinates = useSelectionStore(
     useShallow((state) =>
-      fromGroupId && state.groupsCoordinates
-        ? state.groupsCoordinates[fromGroupId]
+      fromElementId && state.elementsCoordinates
+        ? state.elementsCoordinates[fromElementId]
         : undefined,
     ),
   );
-  const toGroupCoordinates = useGroupsStore(
+  const toGroupCoordinates = useSelectionStore(
     useShallow((state) =>
-      state.groupsCoordinates
-        ? state.groupsCoordinates[edge.to.groupId]
+      state.elementsCoordinates
+        ? state.elementsCoordinates[edge.to.groupId]
         : undefined,
     ),
   );
+  const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
 
-  const { eventsCoordinates } = useEventsCoordinates();
   const [isMouseOver, setIsMouseOver] = useState(false);
-  const { isOpen, onOpen, onClose } = useDisclosure();
-  const [edgeMenuPosition, setEdgeMenuPosition] = useState({ x: 0, y: 0 });
 
   const isPreviewing = isMouseOver || previewingEdge?.id === edge.id;
-
-  const sourceElementCoordinates =
-    "eventId" in edge.from
-      ? eventsCoordinates[edge.from.eventId]
-      : fromGroupCoordinates;
 
   const sourceTop = useMemo(() => {
     const endpointId =
       "eventId" in edge.from
         ? edge.from.eventId
-        : (edge?.from.itemId ?? edge?.from.blockId);
+        : (edge?.from.pathId ?? edge?.from.itemId ?? edge?.from.blockId);
     if (!endpointId) return;
     return sourceEndpointYOffsets.get(endpointId)?.y;
   }, [edge.from, sourceEndpointYOffsets]);
@@ -76,10 +70,9 @@ export const Edge = ({ edge, fromGroupId }: Props) => {
   }, [deleteEdge, edge.id, edge.to.blockId, targetEndpointYOffsets]);
 
   const path = useMemo(() => {
-    if (!sourceElementCoordinates || !toGroupCoordinates || !sourceTop)
-      return ``;
+    if (!fromElementCoordinates || !toGroupCoordinates || !sourceTop) return ``;
     const anchorsPosition = getAnchorsPosition({
-      sourceGroupCoordinates: sourceElementCoordinates,
+      sourceGroupCoordinates: fromElementCoordinates,
       targetGroupCoordinates: toGroupCoordinates,
       elementWidth: "eventId" in edge.from ? eventWidth : groupWidth,
       sourceTop,
@@ -88,7 +81,7 @@ export const Edge = ({ edge, fromGroupId }: Props) => {
     });
     return computeEdgePath(anchorsPosition);
   }, [
-    sourceElementCoordinates,
+    fromElementCoordinates,
     toGroupCoordinates,
     sourceTop,
     edge.from,
@@ -104,53 +97,59 @@ export const Edge = ({ edge, fromGroupId }: Props) => {
     setPreviewingEdge(edge);
   };
 
-  const handleContextMenuTrigger = (e: React.MouseEvent) => {
-    if (isReadOnly) return;
-    e.preventDefault();
-    setEdgeMenuPosition({ x: e.clientX, y: e.clientY });
-    onOpen();
-  };
-
   const handleDeleteEdge = () => deleteEdge(edge.id);
+
+  useKeyboardShortcuts({
+    backspace: () => {
+      if (isReadOnly || !isPreviewing) return;
+      deleteEdge(edge.id);
+    },
+  });
 
   return (
     <>
-      <path
-        data-testid="clickable-edge"
-        d={path}
-        strokeWidth="18px"
-        stroke="white"
-        fill="none"
-        pointerEvents="stroke"
-        style={{ cursor: "pointer", visibility: "hidden" }}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        onClick={handleEdgeClick}
-        onContextMenu={handleContextMenuTrigger}
-      />
-      <path
-        data-testid="edge"
-        d={path}
-        stroke={
-          isPreviewing
-            ? colors.blue[400]
-            : isDark
-              ? colors.gray[700]
-              : colors.gray[400]
-        }
-        strokeWidth="2px"
-        markerEnd={isPreviewing ? "url(#blue-arrow)" : "url(#arrow)"}
-        fill="none"
-        pointerEvents="none"
-      />
-      <Portal>
-        <EdgeMenu
-          isOpen={isOpen}
-          position={edgeMenuPosition}
-          onDeleteEdge={handleDeleteEdge}
-          onClose={onClose}
+      <ContextMenu.Root onOpenChange={setIsContextMenuOpen}>
+        <ContextMenu.Trigger
+          render={(props) => (
+            <>
+              <path
+                {...props}
+                data-testid="clickable-edge"
+                d={path}
+                strokeWidth="18px"
+                stroke="white"
+                fill="none"
+                pointerEvents="stroke"
+                style={{ cursor: "pointer", visibility: "hidden" }}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+                onClick={handleEdgeClick}
+              />
+              <path
+                data-testid="edge"
+                d={path}
+                stroke={
+                  isPreviewing || isContextMenuOpen
+                    ? "var(--chakra-colors-orange-400)"
+                    : isDark
+                      ? colors.gray[700]
+                      : colors.gray[400]
+                }
+                strokeWidth="2px"
+                markerEnd={isPreviewing ? "url(#orange-arrow)" : "url(#arrow)"}
+                fill="none"
+                pointerEvents="none"
+              />
+            </>
+          )}
         />
-      </Portal>
+        <ContextMenu.Popup>
+          <ContextMenu.Item className="text-red-10" onClick={handleDeleteEdge}>
+            <TrashIcon />
+            Delete
+          </ContextMenu.Item>
+        </ContextMenu.Popup>
+      </ContextMenu.Root>
     </>
   );
 };

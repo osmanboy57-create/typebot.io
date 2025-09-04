@@ -1,8 +1,13 @@
-import { DropdownList } from "@/components/DropdownList";
 import { MoreInfoTooltip } from "@/components/MoreInfoTooltip";
 import { SwitchWithRelatedSettings } from "@/components/SwitchWithRelatedSettings";
+import { BasicSelect } from "@/components/inputs/BasicSelect";
 import { SwitchWithLabel } from "@/components/inputs/SwitchWithLabel";
 import {
+  Accordion,
+  AccordionButton,
+  AccordionIcon,
+  AccordionItem,
+  AccordionPanel,
   FormControl,
   FormLabel,
   HStack,
@@ -11,13 +16,15 @@ import {
   Text,
   useColorModeValue,
 } from "@chakra-ui/react";
+import { T, useTranslate } from "@tolgee/react";
 import { isDefined } from "@typebot.io/lib/utils";
 import {
   defaultSettings,
   rememberUserStorages,
 } from "@typebot.io/settings/constants";
-import type { Settings } from "@typebot.io/settings/schemas";
+import type { Settings, SystemMessages } from "@typebot.io/settings/schemas";
 import React from "react";
+import { SystemMessagesForm } from "./SystemMessagesForm";
 
 type Props = {
   generalSettings: Settings["general"] | undefined;
@@ -28,6 +35,7 @@ export const GeneralSettingsForm = ({
   generalSettings,
   onGeneralSettingsChange,
 }: Props) => {
+  const { t } = useTranslate();
   const keyBg = useColorModeValue(undefined, "gray.600");
   const toggleRememberUser = (isEnabled: boolean) =>
     onGeneralSettingsChange({
@@ -63,29 +71,36 @@ export const GeneralSettingsForm = ({
       },
     });
 
+  const updateSystemMessages = (systemMessages: SystemMessages) => {
+    onGeneralSettingsChange({
+      ...generalSettings,
+      systemMessages,
+    });
+  };
+
   return (
     <Stack spacing={6}>
       <SwitchWithLabel
-        label="Prefill input"
+        label={t("settings.sideMenu.general.prefillInput")}
         initialValue={
           generalSettings?.isInputPrefillEnabled ??
           defaultSettings.general.isInputPrefillEnabled
         }
         onCheckChange={handleInputPrefillChange}
-        moreInfoContent="Inputs are automatically pre-filled whenever their associated variable has a value"
+        moreInfoContent={t("settings.sideMenu.general.prefillInput.tooltip")}
       />
       <SwitchWithLabel
-        label="Hide query params on bot start"
+        label={t("settings.sideMenu.general.hideQueryParams")}
         initialValue={
           generalSettings?.isHideQueryParamsEnabled ??
           defaultSettings.general.isHideQueryParamsEnabled
         }
         onCheckChange={handleHideQueryParamsChange}
-        moreInfoContent="If your URL contains query params, they will be automatically hidden when the bot starts."
+        moreInfoContent={t("settings.sideMenu.general.hideQueryParams.tooltip")}
       />
       <SwitchWithRelatedSettings
-        label={"Remember user"}
-        moreInfoContent="If enabled, the chat state will be restored if the user comes back after exiting."
+        label={t("settings.sideMenu.general.rememberUser")}
+        moreInfoContent={t("settings.sideMenu.general.rememberUser.tooltip")}
         initialValue={
           generalSettings?.rememberUser?.isEnabled ??
           (isDefined(generalSettings?.isNewResultOnRefreshEnabled)
@@ -96,34 +111,50 @@ export const GeneralSettingsForm = ({
       >
         <FormControl as={HStack} justifyContent="space-between">
           <FormLabel mb="0">
-            Storage:&nbsp;
+            {t("settings.sideMenu.general.rememberUser.storage")}{" "}
             <MoreInfoTooltip>
               <Stack>
                 <Text>
-                  Choose{" "}
-                  <Tag size="sm" bgColor={keyBg}>
-                    session
-                  </Tag>{" "}
-                  to remember the user as long as he does not closes the tab or
-                  the browser.
+                  <T
+                    keyName="settings.sideMenu.general.rememberUser.storage.session.tooltip"
+                    params={{
+                      tag: <Tag size="sm" bgColor={keyBg} />,
+                    }}
+                  />
                 </Text>
                 <Text>
-                  Choose{" "}
-                  <Tag size="sm" bgColor={keyBg}>
-                    local
-                  </Tag>{" "}
-                  to remember the user forever on the same device.
+                  <T
+                    keyName="settings.sideMenu.general.rememberUser.storage.local.tooltip"
+                    params={{
+                      tag: <Tag size="sm" bgColor={keyBg} />,
+                    }}
+                  />
                 </Text>
               </Stack>
             </MoreInfoTooltip>
           </FormLabel>
-          <DropdownList
-            currentItem={generalSettings?.rememberUser?.storage ?? "session"}
-            onItemSelect={updateRememberUserStorage}
+          <BasicSelect
+            value={generalSettings?.rememberUser?.storage}
+            defaultValue={defaultSettings.general.rememberUser.storage}
+            onChange={updateRememberUserStorage}
             items={rememberUserStorages}
-          ></DropdownList>
+          />
         </FormControl>
       </SwitchWithRelatedSettings>
+      <Accordion allowToggle>
+        <AccordionItem>
+          <AccordionButton justifyContent="space-between">
+            {t("settings.sideMenu.general.systemMessages")}
+            <AccordionIcon />
+          </AccordionButton>
+          <AccordionPanel>
+            <SystemMessagesForm
+              systemMessages={generalSettings?.systemMessages}
+              onSystemMessagesChange={updateSystemMessages}
+            />
+          </AccordionPanel>
+        </AccordionItem>
+      </Accordion>
     </Stack>
   );
 };

@@ -1,16 +1,23 @@
-import { useUser } from "@/features/account/hooks/useUser";
+import { Portal } from "@/components/Portal";
+import { FileCurlyIcon, MinusIcon, PlusIcon } from "@/components/icons";
+import type {
+  EdgeWithTotalVisits,
+  TotalAnswers,
+} from "@/features/analytics/schemas";
+import { BoardMenuButton } from "@/features/editor/components/BoardMenuButton";
 import { headerHeight } from "@/features/editor/constants";
 import { useTypebot } from "@/features/editor/providers/TypebotProvider";
-import { Fade, Flex, type FlexProps, useEventListener } from "@chakra-ui/react";
+import { useUser } from "@/features/user/hooks/useUser";
+import { useRightPanel } from "@/hooks/useRightPanel";
+import { Flex, type FlexProps, useEventListener } from "@chakra-ui/react";
 import { createId } from "@paralleldrive/cuid2";
+import { shouldOpenBlockSettingsOnCreation } from "@typebot.io/blocks-core/helpers";
 import type { BlockV6 } from "@typebot.io/blocks-core/schemas/schema";
 import { GraphNavigation } from "@typebot.io/prisma/enum";
-import type {
-  TotalAnswers,
-  TotalVisitedEdges,
-} from "@typebot.io/schemas/features/analytics";
 import type { PublicTypebotV6 } from "@typebot.io/typebot/schemas/publicTypebot";
 import type { TypebotV6 } from "@typebot.io/typebot/schemas/typebot";
+import { Tooltip } from "@typebot.io/ui/components/Tooltip";
+import { cx } from "@typebot.io/ui/lib/cva";
 import { useGesture } from "@use-gesture/react";
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -20,69 +27,71 @@ import { graphPositionDefaultValue } from "../constants";
 import { computeSelectBoxDimensions } from "../helpers/computeSelectBoxDimensions";
 import { isSelectBoxIntersectingWithElement } from "../helpers/isSelectBoxIntersectingWithElement";
 import { projectMouse } from "../helpers/projectMouse";
-import { useGroupsStore } from "../hooks/useGroupsStore";
+import { useSelectionStore } from "../hooks/useSelectionStore";
 import { useBlockDnd } from "../providers/GraphDndProvider";
 import { useGraph } from "../providers/GraphProvider";
 import type { Coordinates } from "../types";
+import { ElementsSelectionMenu } from "./ElementsSelectionMenu";
 import GraphElements from "./GraphElements";
-import { GroupSelectionMenu } from "./GroupSelectionMenu";
 import { SelectBox } from "./SelectBox";
-import { ZoomButtons } from "./ZoomButtons";
 
 const maxScale = 2;
-const minScale = 0.3;
+const minScale = 0.2;
 const zoomButtonsScaleBlock = 0.2;
 
 export const Graph = ({
   typebot,
   totalAnswers,
-  totalVisitedEdges,
+  edgesWithTotalUsers,
   onUnlockProPlanClick,
   ...props
 }: {
   typebot: TypebotV6 | PublicTypebotV6;
-  totalVisitedEdges?: TotalVisitedEdges[];
+  edgesWithTotalUsers?: EdgeWithTotalVisits[];
   totalAnswers?: TotalAnswers[];
   onUnlockProPlanClick?: () => void;
 } & FlexProps) => {
   const {
     draggedBlockType,
     setDraggedBlockType,
+    draggedEventType,
+    setDraggedEventType,
     draggedBlock,
     setDraggedBlock,
     draggedItem,
     setDraggedItem,
   } = useBlockDnd();
-  const { createGroup } = useTypebot();
+  const { createGroup, createEvent } = useTypebot();
   const { user } = useUser();
   const {
     isReadOnly,
     setGraphPosition: setGlobalGraphPosition,
-    setOpenedBlockId,
-    setOpenedItemId,
+    setOpenedNodeId,
     setPreviewingEdge,
     connectingIds,
   } = useGraph();
-  const isDraggingGraph = useGroupsStore((state) => state.isDraggingGraph);
-  const setIsDraggingGraph = useGroupsStore(
+  const isDraggingGraph = useSelectionStore((state) => state.isDraggingGraph);
+  const setIsDraggingGraph = useSelectionStore(
     (state) => state.setIsDraggingGraph,
   );
-  const focusedGroups = useGroupsStore(
-    useShallow((state) => state.focusedGroups),
+  const focusedElementsId = useSelectionStore(
+    useShallow((state) => state.focusedElementsId),
   );
   const {
-    setGroupsCoordinates,
-    blurGroups,
-    setFocusedGroups,
-    updateGroupCoordinates,
-  } = useGroupsStore(
+    setElementsCoordinates,
+    blurElements,
+    setFocusedElements,
+    updateElementCoordinates,
+  } = useSelectionStore(
     useShallow((state) => ({
-      updateGroupCoordinates: state.updateGroupCoordinates,
-      setGroupsCoordinates: state.setGroupsCoordinates,
-      blurGroups: state.blurGroups,
-      setFocusedGroups: state.setFocusedGroups,
+      updateElementCoordinates: state.updateElementCoordinates,
+      setElementsCoordinates: state.setElementsCoordinates,
+      blurElements: state.blurElements,
+      setFocusedElements: state.setFocusedElements,
     })),
   );
+
+  const [, setRightPanel] = useRightPanel();
 
   const [graphPosition, setGraphPosition] = useState(
     graphPositionDefaultValue(
@@ -102,8 +111,8 @@ export const Graph = ({
       }
     | undefined
   >();
-  const [groupRects, setGroupRects] = useState<
-    { groupId: string; rect: DOMRect }[] | undefined
+  const [elementRects, setElementRects] = useState<
+    { elementId: string; rect: DOMRect }[] | undefined
   >();
   const [isDragging, setIsDragging] = useState(false);
 
@@ -138,30 +147,46 @@ export const Graph = ({
   }, [debouncedGraphPosition, setGlobalGraphPosition]);
 
   useEffect(() => {
-    setGroupsCoordinates(typebot.groups);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setElementsCoordinates({
+      groups: typebot.groups,
+      events: typebot.events,
+    });
   }, []);
 
   const handleMouseUp = (e: MouseEvent) => {
     if (!typebot) return;
     if (draggedItem) setDraggedItem(undefined);
-    if (!draggedBlock && !draggedBlockType) return;
-
+    if (!draggedBlock && !draggedBlockType && !draggedEventType) return;
     const coordinates = projectMouse(
       { x: e.clientX, y: e.clientY },
       graphPosition,
     );
     const id = createId();
-    updateGroupCoordinates(id, coordinates);
-    const newBlockId = createGroup({
-      id,
-      ...coordinates,
-      block: draggedBlock ?? (draggedBlockType as BlockV6["type"]),
-      indices: { groupIndex: typebot.groups.length, blockIndex: 0 },
-    });
-    setDraggedBlock(undefined);
-    setDraggedBlockType(undefined);
-    if (newBlockId) setOpenedBlockId(newBlockId);
+    updateElementCoordinates(id, coordinates);
+    if (draggedEventType) {
+      createEvent({
+        id,
+        type: draggedEventType,
+        graphCoordinates: coordinates,
+      });
+      setDraggedEventType(undefined);
+      setOpenedNodeId(id);
+    } else {
+      const newBlockId = createGroup({
+        id,
+        ...coordinates,
+        block: draggedBlock ?? (draggedBlockType as BlockV6["type"]),
+        indices: { groupIndex: typebot.groups.length, blockIndex: 0 },
+      });
+      setDraggedBlock(undefined);
+      setDraggedBlockType(undefined);
+      if (newBlockId && shouldOpenBlockSettingsOnCreation(draggedBlockType)) {
+        setTimeout(() => {
+          setOpenedNodeId(newBlockId);
+          // To avoid race condition with Graph mouse up event that can close the popover
+        }, 1);
+      }
+    }
   };
 
   const handleCaptureMouseDown = (e: MouseEvent) => {
@@ -169,19 +194,17 @@ export const Graph = ({
     if (isRightClick) e.stopPropagation();
   };
 
-  const handlePointerUp = () => {
-    if (isDraggingGraph) return;
+  const handlePointerUp = (e: MouseEvent) => {
+    if (isDraggingGraph || e.button === 2) return;
     if (
       !selectBoxCoordinates ||
       Math.abs(selectBoxCoordinates?.dimension.width) +
         Math.abs(selectBoxCoordinates?.dimension.height) <
         5
     ) {
-      blurGroups();
+      blurElements();
     }
     setSelectBoxCoordinates(undefined);
-    setOpenedBlockId(undefined);
-    setOpenedItemId(undefined);
     setPreviewingEdge(undefined);
   };
 
@@ -203,27 +226,29 @@ export const Graph = ({
           return;
         }
         if (isReadOnly) return;
-        const currentGroupRects = props.first
-          ? Array.from(document.querySelectorAll(".group")).map((element) => {
-              return {
-                groupId: element.id.split("-")[1],
-                rect: element.getBoundingClientRect(),
-              };
-            })
-          : groupRects;
-        if (props.first) setGroupRects(currentGroupRects);
+        const currentElementRects = props.first
+          ? Array.from(document.querySelectorAll("[data-selectable]")).map(
+              (element) => {
+                return {
+                  elementId: (element as HTMLDivElement).dataset.selectable!,
+                  rect: element.getBoundingClientRect(),
+                };
+              },
+            )
+          : elementRects;
+        if (props.first) setElementRects(currentElementRects);
         const dimensions = computeSelectBoxDimensions(props);
         setSelectBoxCoordinates(dimensions);
-        const selectedGroups = currentGroupRects!.reduce<string[]>(
-          (groups, element) => {
+        const selectedElements = currentElementRects!.reduce<string[]>(
+          (acc, element) => {
             if (isSelectBoxIntersectingWithElement(dimensions, element.rect)) {
-              return [...groups, element.groupId];
+              return [...acc, element.elementId];
             }
-            return groups;
+            return acc;
           },
           [],
         );
-        if (selectedGroups.length > 0) setFocusedGroups(selectedGroups);
+        if (selectedElements.length > 0) setFocusedElements(selectedElements);
       },
       onWheel: ({ shiftKey, delta: [dx, dy], pinching }) => {
         if (pinching) return;
@@ -245,6 +270,18 @@ export const Graph = ({
         modifierKey: "ctrlKey",
       },
       drag: { pointer: { keys: false } },
+    },
+  );
+
+  // Prevent back/forward navigation in Firefox
+  useEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault();
+    },
+    graphContainerRef.current,
+    {
+      passive: false,
     },
   );
 
@@ -311,7 +348,8 @@ export const Graph = ({
   };
 
   useEventListener("keydown", (e) => {
-    if (e.key === " ") setIsDraggingGraph(true);
+    if (e.key === " " && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey)
+      setIsDraggingGraph(true);
   });
   useEventListener("keyup", (e) => {
     if (e.key === " ") {
@@ -326,7 +364,6 @@ export const Graph = ({
       setIsDraggingGraph(false);
       setIsDragging(false);
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     window as any,
   );
 
@@ -350,28 +387,12 @@ export const Graph = ({
   return (
     <Flex
       ref={graphContainerRef}
-      position="relative"
       style={{
         touchAction: "none",
         cursor,
       }}
       {...props}
     >
-      {!isReadOnly && (
-        <>
-          {selectBoxCoordinates && <SelectBox {...selectBoxCoordinates} />}
-          <Fade in={!isReadOnly && focusedGroups.length > 1}>
-            <GroupSelectionMenu
-              graphPosition={graphPosition}
-              focusedGroups={focusedGroups}
-              blurGroups={blurGroups}
-              isReadOnly={isReadOnly}
-            />
-          </Fade>
-        </>
-      )}
-
-      <ZoomButtons onZoomInClick={zoomIn} onZoomOutClick={zoomOut} />
       <Flex
         flex="1"
         w="full"
@@ -392,10 +413,67 @@ export const Graph = ({
           groups={typebot.groups}
           events={typebot.events}
           totalAnswers={totalAnswers}
-          totalVisitedEdges={totalVisitedEdges}
+          edgesWithTotalUsers={edgesWithTotalUsers}
           onUnlockProPlanClick={onUnlockProPlanClick}
         />
       </Flex>
+      {!isReadOnly && selectBoxCoordinates && (
+        <SelectBox {...selectBoxCoordinates} />
+      )}
+      <div
+        className={cx(
+          "absolute top-4 right-10 flex items-stretch bg-gray-1 p-1.5 rounded-lg gap-1 border",
+        )}
+      >
+        <ElementsSelectionMenu
+          graphPosition={graphPosition}
+          focusedElementIds={focusedElementsId}
+          blurElements={blurElements}
+          isReadOnly={isReadOnly}
+        />
+        {focusedElementsId.length > 0 && (
+          <div className="flex-1 border-[.5px] border-gray-4 -my-1.5 mx-1.5" />
+        )}
+        <Tooltip.Root>
+          <Tooltip.TriggerButton
+            aria-label="Open variables drawer"
+            size="icon"
+            onClick={() => setRightPanel("variables")}
+            variant="secondary"
+            className="size-8"
+          >
+            <FileCurlyIcon />
+          </Tooltip.TriggerButton>
+          <Tooltip.Popup>Open variables drawer</Tooltip.Popup>
+        </Tooltip.Root>
+        <div className="flex-1 border-[.5px] border-gray-4 -my-1.5 mx-1.5" />
+        <Tooltip.Root>
+          <Tooltip.TriggerButton
+            aria-label={"Zoom out"}
+            onClick={zoomOut}
+            size="icon"
+            variant="secondary"
+            className="size-8"
+          >
+            <MinusIcon />
+          </Tooltip.TriggerButton>
+          <Tooltip.Popup>Zoom out</Tooltip.Popup>
+        </Tooltip.Root>
+        <Tooltip.Root>
+          <Tooltip.TriggerButton
+            aria-label={"Zoom in"}
+            onClick={zoomIn}
+            size="icon"
+            variant="secondary"
+            className="size-8"
+          >
+            <PlusIcon />
+          </Tooltip.TriggerButton>
+          <Tooltip.Popup>Zoom in</Tooltip.Popup>
+        </Tooltip.Root>
+        <div className="flex-1 border-[.5px] border-gray-4 -my-1.5 mx-1.5" />
+        <BoardMenuButton />
+      </div>
     </Flex>
   );
 };

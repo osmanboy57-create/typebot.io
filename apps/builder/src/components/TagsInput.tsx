@@ -1,14 +1,8 @@
-import { colors } from "@/lib/theme";
-import {
-  HStack,
-  IconButton,
-  Input,
-  Text,
-  Wrap,
-  WrapItem,
-} from "@chakra-ui/react";
+import { HStack, Input, Text, Wrap, WrapItem } from "@chakra-ui/react";
 import { convertStrToList } from "@typebot.io/lib/convertStrToList";
-import { isEmpty } from "@typebot.io/lib/utils";
+import { isEmpty, isNotEmpty } from "@typebot.io/lib/utils";
+import { colors } from "@typebot.io/ui/chakraTheme";
+import { Button } from "@typebot.io/ui/components/Button";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRef, useState } from "react";
 import { CloseIcon } from "./icons";
@@ -31,7 +25,7 @@ export const TagsInput = ({ items, placeholder, onChange }: Props) => {
     if (e.target.value.length - inputValue.length > 0) {
       const values = convertStrToList(e.target.value);
       if (values.length > 1) {
-        onChange([...(items ?? []), ...convertStrToList(e.target.value)]);
+        onChange([...(items ?? []), ...values.filter(isNotEmpty)]);
         setInputValue("");
       }
     }
@@ -80,25 +74,30 @@ export const TagsInput = ({ items, placeholder, onChange }: Props) => {
     onChange(newItems);
   };
 
-  const addItem = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const addItem = () => {
     if (isEmpty(inputValue)) return;
     setInputValue("");
     onChange(items ? [...items, inputValue.trim()] : [inputValue.trim()]);
+  };
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    addItem();
   };
 
   return (
     <Wrap
       spacing={1}
       borderWidth={1}
-      boxShadow={isFocused ? `0 0 0 1px ${colors["blue"][500]}` : undefined}
+      boxShadow={isFocused ? `0 0 0 1px ${colors["orange"][500]}` : undefined}
       p="2"
       rounded="md"
-      borderColor={isFocused ? "blue.500" : "gray.200"}
+      borderColor={isFocused ? "orange.500" : "gray.200"}
       transitionProperty="box-shadow, border-color"
       transitionDuration="150ms"
       transitionTimingFunction="ease-in-out"
       onClick={() => inputRef.current?.focus()}
+      onBlur={addItem}
       onKeyDown={handleKeyDown}
     >
       <AnimatePresence mode="popLayout">
@@ -109,6 +108,9 @@ export const TagsInput = ({ items, placeholder, onChange }: Props) => {
             animate={{ opacity: 1, transform: "translateY(0)" }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.1 }}
+            style={{
+              maxWidth: "100%",
+            }}
           >
             <WrapItem>
               <Tag
@@ -121,7 +123,7 @@ export const TagsInput = ({ items, placeholder, onChange }: Props) => {
         ))}
       </AnimatePresence>
       <WrapItem>
-        <form onSubmit={addItem}>
+        <form onSubmit={handleSubmit}>
           <Input
             ref={inputRef}
             h="24px"
@@ -156,18 +158,20 @@ const Tag = ({
     pl="1"
     rounded="sm"
     maxW="100%"
-    borderColor={isFocused ? "blue.500" : undefined}
-    boxShadow={isFocused ? `0 0 0 1px ${colors["blue"][500]}` : undefined}
+    borderColor={isFocused ? "orange.500" : undefined}
+    boxShadow={isFocused ? `0 0 0 1px ${colors["orange"][500]}` : undefined}
   >
     <Text fontSize="sm" noOfLines={1}>
       {content}
     </Text>
-    <IconButton
-      size="xs"
-      icon={<CloseIcon />}
+    <Button
+      size="icon"
       aria-label="Remove tag"
       variant="ghost"
+      className="size-6"
       onClick={onDeleteClick}
-    />
+    >
+      <CloseIcon />
+    </Button>
   </HStack>
 );

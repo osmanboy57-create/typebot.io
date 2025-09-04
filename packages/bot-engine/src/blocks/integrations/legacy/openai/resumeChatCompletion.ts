@@ -1,9 +1,15 @@
 import type { ChatCompletionOpenAIOptions } from "@typebot.io/blocks-integrations/openai/schema";
+import type { ContinueChatResponse } from "@typebot.io/chat-api/schemas";
+import type { SessionState } from "@typebot.io/chat-session/schemas";
 import { byId, isDefined } from "@typebot.io/lib/utils";
 import type { VariableWithUnknowValue } from "@typebot.io/variables/schemas";
-import type { ContinueChatResponse } from "../../../../schemas/api";
-import type { SessionState } from "../../../../schemas/chatSession";
 import { updateVariablesInSession } from "../../../../updateVariablesInSession";
+
+interface ResumeChatCompletionTokens {
+  totalTokens?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+}
 
 export const resumeChatCompletion =
   (
@@ -18,7 +24,7 @@ export const resumeChatCompletion =
       logs?: ContinueChatResponse["logs"];
     },
   ) =>
-  async (message: string, totalTokens?: number) => {
+  async (message: string, tokens?: ResumeChatCompletionTokens) => {
     let newSessionState = state;
     const newVariables = options.responseMapping?.reduce<
       VariableWithUnknowValue[]
@@ -34,10 +40,31 @@ export const resumeChatCompletion =
             : message,
         });
       }
-      if (mapping.valueToExtract === "Total tokens" && isDefined(totalTokens)) {
+      if (
+        mapping.valueToExtract === "Total tokens" &&
+        isDefined(tokens?.totalTokens)
+      ) {
         newVariables.push({
           ...existingVariable,
-          value: totalTokens,
+          value: tokens.totalTokens,
+        });
+      }
+      if (
+        mapping.valueToExtract === "Prompt tokens" &&
+        isDefined(tokens?.promptTokens)
+      ) {
+        newVariables.push({
+          ...existingVariable,
+          value: tokens.promptTokens,
+        });
+      }
+      if (
+        mapping.valueToExtract === "Completion tokens" &&
+        isDefined(tokens?.completionTokens)
+      ) {
+        newVariables.push({
+          ...existingVariable,
+          value: tokens.completionTokens,
         });
       }
       return newVariables;

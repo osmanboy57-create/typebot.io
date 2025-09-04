@@ -1,5 +1,8 @@
-import { DropdownList } from "@/components/DropdownList";
+import { MoreInfoTooltip } from "@/components/MoreInfoTooltip";
+import { SwitchWithRelatedSettings } from "@/components/SwitchWithRelatedSettings";
+import { TagsInput } from "@/components/TagsInput";
 import { TextInput } from "@/components/inputs";
+import { BasicSelect } from "@/components/inputs/BasicSelect";
 import { CodeEditor } from "@/components/inputs/CodeEditor";
 import { SwitchWithLabel } from "@/components/inputs/SwitchWithLabel";
 import { VariableSearchInput } from "@/components/inputs/VariableSearchInput";
@@ -18,6 +21,7 @@ import {
   fileVisibilityOptions,
 } from "@typebot.io/blocks-inputs/file/constants";
 import type { FileInputBlock } from "@typebot.io/blocks-inputs/file/schema";
+import { Field } from "@typebot.io/ui/components/Field";
 import type { Variable } from "@typebot.io/variables/schemas";
 import React from "react";
 
@@ -28,6 +32,21 @@ type Props = {
 
 export const FileInputSettings = ({ options, onOptionsChange }: Props) => {
   const { t } = useTranslate();
+
+  const updateAllowedFileTypes = (allowedFileTypes: string[]) =>
+    onOptionsChange({
+      ...options,
+      allowedFileTypes: {
+        ...options?.allowedFileTypes,
+        types: allowedFileTypes,
+      },
+    });
+
+  const updateAllowedFileTypesIsEnabled = (isEnabled: boolean) =>
+    onOptionsChange({
+      ...options,
+      allowedFileTypes: { ...options?.allowedFileTypes, isEnabled },
+    });
 
   const handleButtonLabelChange = (button: string) =>
     onOptionsChange({ ...options, labels: { ...options?.labels, button } });
@@ -54,7 +73,7 @@ export const FileInputSettings = ({ options, onOptionsChange }: Props) => {
     onOptionsChange({ ...options, labels: { ...options?.labels, skip } });
 
   const updateVisibility = (
-    visibility: (typeof fileVisibilityOptions)[number],
+    visibility: (typeof fileVisibilityOptions)[number] | undefined,
   ) => onOptionsChange({ ...options, visibility });
 
   const updateSingleFileSuccessLabel = (single: string) =>
@@ -82,6 +101,19 @@ export const FileInputSettings = ({ options, onOptionsChange }: Props) => {
         initialValue={options?.isRequired ?? defaultFileInputOptions.isRequired}
         onCheckChange={handleRequiredChange}
       />
+      <SwitchWithRelatedSettings
+        label={t("blocks.inputs.file.settings.allowedFileTypes.label")}
+        initialValue={options?.allowedFileTypes?.isEnabled}
+        onCheckChange={updateAllowedFileTypesIsEnabled}
+      >
+        <TagsInput
+          items={options?.allowedFileTypes?.types}
+          onChange={updateAllowedFileTypes}
+          placeholder={t(
+            "blocks.inputs.file.settings.allowedFileTypes.placeholder",
+          )}
+        />
+      </SwitchWithRelatedSettings>
       <SwitchWithLabel
         label={t("blocks.inputs.file.settings.allowMultiple.label")}
         initialValue={
@@ -90,28 +122,59 @@ export const FileInputSettings = ({ options, onOptionsChange }: Props) => {
         }
         onCheckChange={handleMultipleFilesChange}
       />
+
       <Stack>
-        <FormLabel mb="0">
-          {t("blocks.inputs.settings.placeholder.label")}
+        <FormLabel mb="0" htmlFor="variable">
+          {options?.isMultipleAllowed
+            ? t("blocks.inputs.file.settings.saveMultipleUpload.label")
+            : t("blocks.inputs.file.settings.saveSingleUpload.label")}
         </FormLabel>
-        <CodeEditor
-          lang="html"
-          onChange={handlePlaceholderLabelChange}
-          defaultValue={
-            options?.labels?.placeholder ??
-            defaultFileInputOptions.labels.placeholder
-          }
-          height={"100px"}
-          withVariableButton={false}
+        <VariableSearchInput
+          initialVariableId={options?.variableId}
+          onSelectVariable={handleVariableChange}
         />
       </Stack>
+
+      <Field.Root>
+        <Field.Label>
+          Visibility:{" "}
+          <MoreInfoTooltip>
+            This setting determines who can see the uploaded files. "Public"
+            means that anyone who has the link can see the files. "Private"
+            means that only a member of this workspace can see the files. Check
+            the docs for more information.
+          </MoreInfoTooltip>
+        </Field.Label>
+        <BasicSelect
+          value={options?.visibility}
+          defaultValue={defaultFileInputOptions.visibility}
+          onChange={updateVisibility}
+          items={fileVisibilityOptions}
+        />
+      </Field.Root>
+
       <Accordion allowToggle>
         <AccordionItem>
           <AccordionButton justifyContent="space-between">
-            Labels
+            {t("blocks.inputs.file.settings.labels")}
             <AccordionIcon />
           </AccordionButton>
           <AccordionPanel as={Stack} spacing={4}>
+            <Stack>
+              <FormLabel mb="0">
+                {t("blocks.inputs.settings.placeholder.label")}
+              </FormLabel>
+              <CodeEditor
+                lang="html"
+                onChange={handlePlaceholderLabelChange}
+                defaultValue={
+                  options?.labels?.placeholder ??
+                  defaultFileInputOptions.labels.placeholder
+                }
+                height={"100px"}
+                withVariableButton={false}
+              />
+            </Stack>
             <TextInput
               label={t("blocks.inputs.settings.button.label")}
               defaultValue={
@@ -164,25 +227,6 @@ export const FileInputSettings = ({ options, onOptionsChange }: Props) => {
           </AccordionPanel>
         </AccordionItem>
       </Accordion>
-
-      <DropdownList
-        label="Visibility:"
-        moreInfoTooltip='This setting determines who can see the uploaded files. "Public" means that anyone who has the link can see the files. "Private" means that only a members of this workspace can see the files.'
-        currentItem={options?.visibility ?? defaultFileInputOptions.visibility}
-        onItemSelect={updateVisibility}
-        items={fileVisibilityOptions}
-      />
-      <Stack>
-        <FormLabel mb="0" htmlFor="variable">
-          {options?.isMultipleAllowed
-            ? t("blocks.inputs.file.settings.saveMultipleUpload.label")
-            : t("blocks.inputs.file.settings.saveSingleUpload.label")}
-        </FormLabel>
-        <VariableSearchInput
-          initialVariableId={options?.variableId}
-          onSelectVariable={handleVariableChange}
-        />
-      </Stack>
     </Stack>
   );
 };

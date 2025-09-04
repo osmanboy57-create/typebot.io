@@ -3,7 +3,7 @@ import { continueChat as continueChatFn } from "@typebot.io/bot-engine/apiHandle
 import {
   continueChatResponseSchema,
   messageSchema,
-} from "@typebot.io/bot-engine/schemas/api";
+} from "@typebot.io/chat-api/schemas";
 import { z } from "@typebot.io/zod";
 
 export const continueChat = publicProcedure
@@ -16,7 +16,7 @@ export const continueChat = publicProcedure
   })
   .input(
     z.object({
-      message: messageSchema.optional(),
+      message: messageSchema.nullish(),
       sessionId: z
         .string()
         .describe(
@@ -31,15 +31,13 @@ export const continueChat = publicProcedure
   .mutation(
     async ({
       input: { sessionId, message, textBubbleContentFormat },
-      ctx: { origin, res },
-    }) => {
-      const { corsOrigin, ...response } = await continueChatFn({
+      ctx: { origin, iframeReferrerOrigin },
+    }) =>
+      continueChatFn({
         origin,
+        iframeReferrerOrigin,
         sessionId,
-        message,
+        message: message ?? undefined,
         textBubbleContentFormat,
-      });
-      if (corsOrigin) res.setHeader("Access-Control-Allow-Origin", corsOrigin);
-      return response;
-    },
+      }),
   );

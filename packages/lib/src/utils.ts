@@ -76,14 +76,15 @@ export const omit: Omit = (obj, ...keys) => {
   return ret;
 };
 
-const isVariableString = (str: string): boolean => /^\{\{.*\}\}$/.test(str);
+const isStartingWithVariableString = (str: string): boolean =>
+  /^\{\{.*\}\}/.test(str);
 
 export const sanitizeUrl = (url: string): string =>
   url.startsWith("http") ||
   url.startsWith("mailto:") ||
   url.startsWith("tel:") ||
   url.startsWith("sms:") ||
-  isVariableString(url)
+  isStartingWithVariableString(url)
     ? url
     : `https://${url}`;
 
@@ -143,7 +144,6 @@ export const injectCustomHeadCode = (customHeadCode: string) => {
 export const getAtPath = <T>(obj: T, path: string): unknown => {
   if (isNotDefined(obj)) return undefined;
   const pathParts = path.split(".");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let current: any = obj;
   for (const part of pathParts) {
     if (current === undefined) {

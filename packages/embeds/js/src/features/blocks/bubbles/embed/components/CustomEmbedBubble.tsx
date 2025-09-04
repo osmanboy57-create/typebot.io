@@ -1,10 +1,8 @@
 import { TypingBubble } from "@/components/TypingBubble";
 import { executeCode } from "@/features/blocks/logic/script/executeScript";
 import type { InputSubmitContent } from "@/types";
-import { botContainerHeight } from "@/utils/botContainerHeightSignal";
-import { isMobile } from "@/utils/isMobileSignal";
-import type { CustomEmbedBubble as CustomEmbedBubbleProps } from "@typebot.io/bot-engine/schemas/api";
-import clsx from "clsx";
+import type { CustomEmbedBubble as CustomEmbedBubbleProps } from "@typebot.io/chat-api/schemas";
+import { cx } from "@typebot.io/ui/lib/cva";
 import { createSignal, onCleanup, onMount } from "solid-js";
 
 type Props = {
@@ -55,7 +53,7 @@ export const CustomEmbedBubble = (props: Props) => {
 
   return (
     <div
-      class={clsx(
+      class={cx(
         "flex flex-col w-full",
         props.onTransitionEnd ? "animate-fade-in" : undefined,
       )}
@@ -73,17 +71,13 @@ export const CustomEmbedBubble = (props: Props) => {
             {isTyping() && <TypingBubble />}
           </div>
           <div
-            class={clsx(
+            class={cx(
               "p-2 z-20 text-fade-in w-full",
-              isTyping() ? "opacity-0" : "opacity-100",
+              isTyping() ? "opacity-0 h-8 @xs:h-9" : "opacity-100",
             )}
-            style={{
-              height: isTyping() ? (isMobile() ? "32px" : "36px") : undefined,
-            }}
           >
             <div
-              class="w-full overflow-y-auto"
-              style={{ "max-height": `calc(${botContainerHeight()} - 100px)` }}
+              class="w-full overflow-y-auto max-h-[calc(var(--bot-container-height)-100px)]"
               ref={containerRef}
             />
           </div>

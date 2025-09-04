@@ -1,12 +1,13 @@
 import { FileIcon } from "@/components/icons";
-import { trpc } from "@/lib/trpc";
-import { Button, Flex, HStack, IconButton, Text } from "@chakra-ui/react";
+import { trpc } from "@/lib/queryClient";
+import { Flex, HStack, Text } from "@chakra-ui/react";
+import { useQuery } from "@tanstack/react-query";
 import { env } from "@typebot.io/env";
 import { isDefined } from "@typebot.io/lib/utils";
+import { Button } from "@typebot.io/ui/components/Button";
 import React, { useEffect, useState } from "react";
 import { GoogleSheetsLogo } from "./GoogleSheetsLogo";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const window: any;
 
 type Props = {
@@ -24,19 +25,22 @@ export const GoogleSpreadsheetPicker = ({
 }: Props) => {
   const [isPickerInitialized, setIsPickerInitialized] = useState(false);
 
-  const { data } = trpc.sheets.getAccessToken.useQuery({
-    workspaceId,
-    credentialsId,
-  });
-  const { data: spreadsheetData, status } =
-    trpc.sheets.getSpreadsheetName.useQuery(
+  const { data } = useQuery(
+    trpc.sheets.getAccessToken.queryOptions({
+      workspaceId,
+      credentialsId,
+    }),
+  );
+  const { data: spreadsheetData, status } = useQuery(
+    trpc.sheets.getSpreadsheetName.queryOptions(
       {
         workspaceId,
         credentialsId,
         spreadsheetId: spreadsheetId as string,
       },
       { enabled: !!spreadsheetId },
-    );
+    ),
+  );
 
   useEffect(() => {
     loadScript("gapi", "https://apis.google.com/js/api.js", () => {
@@ -72,7 +76,11 @@ export const GoogleSpreadsheetPicker = ({
     if (!isPickerInitialized) throw new Error("Google Picker not inited");
 
     const picker = new window.google.picker.PickerBuilder()
-      .addView(window.google.picker.ViewId.SPREADSHEETS)
+      .addView(
+        new window.google.picker.View(
+          window.google.picker.ViewId.SPREADSHEETS,
+        ).setMimeTypes("application/vnd.google-apps.spreadsheet"),
+      )
       .setOAuthToken(data.accessToken)
       .setDeveloperKey(env.NEXT_PUBLIC_GOOGLE_SHEETS_API_KEY)
       .setCallback(pickerCallback)
@@ -93,24 +101,27 @@ export const GoogleSpreadsheetPicker = ({
       <Flex justifyContent="space-between">
         <HStack spacing={2}>
           <GoogleSheetsLogo />
-          <Text fontWeight="semibold">{spreadsheetData.name}</Text>
+          <Text fontWeight="medium">{spreadsheetData.name}</Text>
         </HStack>
-        <IconButton
-          size="sm"
-          icon={<FileIcon />}
+        <Button
+          size="icon"
           onClick={createPicker}
-          isLoading={!isPickerInitialized}
+          disabled={!isPickerInitialized}
           aria-label={"Pick another spreadsheet"}
-        />
+          variant="secondary"
+        >
+          <FileIcon />
+        </Button>
       </Flex>
     );
   return (
     <Button
       onClick={createPicker}
-      isLoading={
+      disabled={
         !isPickerInitialized ||
-        (isDefined(spreadsheetId) && status === "loading")
+        (isDefined(spreadsheetId) && status === "pending")
       }
+      variant="secondary"
     >
       Pick a spreadsheet
     </Button>

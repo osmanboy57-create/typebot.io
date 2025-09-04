@@ -1,11 +1,7 @@
 import { CloseIcon } from "@/components/icons";
-import { useUser } from "@/features/account/hooks/useUser";
-import {
-  Flex,
-  IconButton,
-  SlideFade,
-  useColorModeValue,
-} from "@chakra-ui/react";
+import { useUser } from "@/features/user/hooks/useUser";
+import { Flex, SlideFade, useColorModeValue } from "@chakra-ui/react";
+import { Button } from "@typebot.io/ui/components/Button";
 import { onboardingVideos } from "../data";
 import { useOnboardingDisclosure } from "../hooks/useOnboardingDisclosure";
 import { YoutubeIframe } from "./YoutubeIframe";
@@ -23,8 +19,7 @@ export const VideoOnboardingFloatingWindow = ({ type }: Props) => {
     defaultOpenDelay: 1000,
     blockDef: undefined,
   });
-  const bgColor = useColorModeValue("white", "gray.900");
-  const closeButtonColorScheme = useColorModeValue("blackAlpha", "gray");
+  const bgColor = useColorModeValue("white", "gray.950");
 
   if (!onboardingVideos[type]) return null;
 
@@ -51,17 +46,14 @@ export const VideoOnboardingFloatingWindow = ({ type }: Props) => {
       >
         <YoutubeIframe id={onboardingVideos[type]!.youtubeId} />
 
-        <IconButton
-          icon={<CloseIcon />}
+        <Button
           aria-label={"Close"}
-          pos="absolute"
-          top="-3"
-          right="-3"
-          colorScheme={closeButtonColorScheme}
-          size="sm"
-          rounded="full"
+          variant="secondary"
+          className="size-8 rounded-full -right-3 -top-3 absolute"
           onClick={onClose}
-        />
+        >
+          <CloseIcon />
+        </Button>
       </Flex>
     </SlideFade>
   );

@@ -38,26 +38,41 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  transpilePackages: ["@typebot.io/billing", "@typebot.io/blocks-bubbles"],
+  transpilePackages: [
+    // https://github.com/nextauthjs/next-auth/discussions/9385#discussioncomment-12023012
+    "next-auth",
+    "@typebot.io/billing",
+    "@typebot.io/blocks-bubbles",
+  ],
   reactStrictMode: true,
   output: "standalone",
   i18n: {
     defaultLocale: "en",
     locales: ["en", "fr", "pt", "pt-BR", "de", "ro", "es", "it", "el"],
   },
-  experimental: {
-    outputFileTracingRoot: join(__dirname, "../../"),
-    serverComponentsExternalPackages: ["isolated-vm"],
-  },
+  serverExternalPackages: ["isolated-vm"],
+  outputFileTracingRoot: join(__dirname, "../../"),
   webpack: (config, { isServer }) => {
-    if (isServer) return config;
-
+    if (isServer) {
+      // TODO: Remove once https://github.com/getsentry/sentry-javascript/issues/8105 is merged and sentry is upgraded
+      config.ignoreWarnings = [
+        {
+          message:
+            /require function is used in a way in which dependencies cannot be statically extracted/,
+        },
+      ];
+      return config;
+    }
     config.resolve.alias["minio"] = false;
     config.resolve.alias["qrcode"] = false;
     config.resolve.alias["isolated-vm"] = false;
+    config.resolve.alias["@googleapis/gmail"] = false;
+    config.resolve.alias["nodemailer"] = false;
+    config.resolve.alias["google-auth-library"] = false;
     return config;
   },
   headers: async () => {
+    const isDev = process.env.NODE_ENV !== "production";
     return [
       {
         source: "/(.*)?",
@@ -66,41 +81,46 @@ const nextConfig = {
             key: "X-Frame-Options",
             value: "SAMEORIGIN",
           },
+          {
+            key: "X-Content-Type-Options",
+            value: "nosniff",
+          },
+          {
+            key: "Content-Security-Policy",
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:",
+              "style-src 'self' 'unsafe-inline' https:",
+              `connect-src 'self' https: wss:${
+                isDev ? " http://localhost:*" : ""
+              }`,
+              "frame-src 'self' https:",
+              "img-src 'self' data: blob: https:",
+              "font-src 'self' https: data:",
+              "media-src 'self' https:",
+              "worker-src 'self' blob:",
+              "object-src 'none'",
+            ].join("; "),
+          },
         ],
       },
     ];
   },
   async rewrites() {
-    return process.env.NEXT_PUBLIC_POSTHOG_KEY
-      ? [
-          {
-            source: "/ingest/:path*",
-            destination:
-              (process.env.NEXT_PUBLIC_POSTHOG_HOST ??
-                "https://app.posthog.com") + "/:path*",
-          },
-          {
-            source: "/healthz",
-            destination: "/api/health",
-          },
-        ]
-      : [
-          {
-            source: "/healthz",
-            destination: "/api/health",
-          },
-        ];
+    return [
+      {
+        source: "/healthz",
+        destination: "/api/health",
+      },
+    ];
   },
 };
 
 export default process.env.SENTRY_DSN
   ? withSentryConfig(nextConfig, {
-      release: process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA + "-builder",
       org: process.env.SENTRY_ORG,
       project: process.env.SENTRY_PROJECT,
-      silent: !process.env.CI,
+      authToken: process.env.SENTRY_AUTH_TOKEN,
       widenClientFileUpload: true,
-      hideSourceMaps: true,
-      disableLogger: true,
     })
   : nextConfig;

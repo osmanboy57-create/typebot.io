@@ -4,13 +4,13 @@ import type { Block } from "@typebot.io/blocks-core/schemas/schema";
 import type { HttpRequest } from "@typebot.io/blocks-integrations/httpRequest/schema";
 import {
   executeHttpRequest,
-  parseWebhookAttributes,
+  parseHttpRequestAttributes,
 } from "@typebot.io/bot-engine/blocks/integrations/httpRequest/executeHttpRequestBlock";
 import { parseSampleResult } from "@typebot.io/bot-engine/blocks/integrations/httpRequest/parseSampleResult";
 import { fetchLinkedChildTypebots } from "@typebot.io/bot-engine/blocks/logic/typebotLink/fetchLinkedChildTypebots";
 import { fetchLinkedParentTypebots } from "@typebot.io/bot-engine/blocks/logic/typebotLink/fetchLinkedParentTypebots";
 import { saveLog } from "@typebot.io/bot-engine/logs/saveLog";
-import { getBlockById } from "@typebot.io/groups/helpers";
+import { getBlockById } from "@typebot.io/groups/helpers/getBlockById";
 import {
   initMiddleware,
   methodNotAllowed,
@@ -20,6 +20,10 @@ import { byId } from "@typebot.io/lib/utils";
 import prisma from "@typebot.io/prisma";
 import type { AnswerInSessionState } from "@typebot.io/results/schemas/answers";
 import type { ResultValues } from "@typebot.io/results/schemas/results";
+import {
+  deleteSessionStore,
+  getSessionStore,
+} from "@typebot.io/runtime-session-store";
 import type { PublicTypebot } from "@typebot.io/typebot/schemas/publicTypebot";
 import type { Typebot } from "@typebot.io/typebot/schemas/typebot";
 import type { Variable } from "@typebot.io/variables/schemas";
@@ -96,8 +100,8 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
           await parseSampleResult(typebot, linkedTypebots)(group.id, variables),
         );
 
-    const parsedWebhook = await parseWebhookAttributes({
-      webhook,
+    const parsedWebhook = await parseHttpRequestAttributes({
+      httpRequest: webhook,
       isCustomBody: block.options?.isCustomBody,
       typebot: {
         ...typebot,
@@ -108,6 +112,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
         }),
       },
       answers,
+      sessionStore: getSessionStore(typebotId),
     });
 
     if (!parsedWebhook)
@@ -132,6 +137,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
         ) ?? [],
       );
 
+    deleteSessionStore(typebotId);
     return res.status(200).send(response);
   }
   return methodNotAllowed(res);

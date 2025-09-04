@@ -1,20 +1,16 @@
-import { ChevronLeftIcon, PlusIcon, TrashIcon } from "@/components/icons";
+import { PlusIcon } from "@/components/icons";
 import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
-import { useToast } from "@/hooks/useToast";
-import { trpc } from "@/lib/trpc";
-import {
-  Button,
-  type ButtonProps,
-  IconButton,
-  Menu,
-  MenuButton,
-  MenuItem,
-  MenuList,
-  Stack,
-  Text,
-} from "@chakra-ui/react";
-import type { Credentials } from "@typebot.io/credentials/schemas";
+import { trpc } from "@/lib/queryClient";
+import { toast } from "@/lib/toast";
+import { Stack, Text } from "@chakra-ui/react";
+import { useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
+import { useTranslate } from "@tolgee/react";
 import type { ForgedBlockDefinition } from "@typebot.io/forge-repository/definitions";
+import { Button, type ButtonProps } from "@typebot.io/ui/components/Button";
+import { Menu } from "@typebot.io/ui/components/Menu";
+import { ChevronDownIcon } from "@typebot.io/ui/icons/ChevronDownIcon";
+import { TrashIcon } from "@typebot.io/ui/icons/TrashIcon";
 import { useRouter } from "next/router";
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
@@ -24,6 +20,13 @@ type Props = Omit<ButtonProps, "type"> & {
   currentCredentialsId: string | undefined;
   onAddClick: () => void;
   onCredentialsSelect: (credentialId?: string) => void;
+  scope: "workspace" | "user";
+};
+
+const getAuthTypeFromBlockId = (blockId: ForgedBlockDefinition["id"]) => {
+  if (blockId === "cal-com" || blockId === "qr-code")
+    throw new Error("Block has no auth");
+  return blockId;
 };
 
 export const ForgedCredentialsDropdown = ({
@@ -31,39 +34,44 @@ export const ForgedCredentialsDropdown = ({
   blockDef,
   onCredentialsSelect,
   onAddClick,
+  scope,
   ...props
 }: Props) => {
   const router = useRouter();
-  const { showToast } = useToast();
-  const { workspace, currentRole } = useWorkspace();
-  const { data, refetch, isLoading } =
-    trpc.credentials.listCredentials.useQuery(
-      {
-        workspaceId: workspace?.id as string,
-        type: blockDef.id as Credentials["type"],
-      },
+  const { t } = useTranslate();
+  const { workspace, currentUserMode } = useWorkspace();
+  const { data, refetch, isLoading } = useQuery(
+    trpc.credentials.listCredentials.queryOptions(
+      scope === "workspace"
+        ? {
+            scope: "workspace",
+            workspaceId: workspace!.id,
+            type: getAuthTypeFromBlockId(blockDef.id),
+          }
+        : {
+            scope: "user",
+            type: getAuthTypeFromBlockId(blockDef.id),
+          },
       { enabled: !!workspace?.id },
-    );
+    ),
+  );
   const [isDeleting, setIsDeleting] = useState<string>();
 
-  const { mutate } = trpc.credentials.deleteCredentials.useMutation({
-    onMutate: ({ credentialsId }) => {
-      setIsDeleting(credentialsId);
-    },
-    onError: (error) => {
-      showToast({
-        description: error.message,
-      });
-    },
-    onSuccess: ({ credentialsId }) => {
-      if (credentialsId === currentCredentialsId)
-        onCredentialsSelect(undefined);
-      refetch();
-    },
-    onSettled: () => {
-      setIsDeleting(undefined);
-    },
-  });
+  const { mutate } = useMutation(
+    trpc.credentials.deleteCredentials.mutationOptions({
+      onMutate: ({ credentialsId }) => {
+        setIsDeleting(credentialsId);
+      },
+      onSuccess: ({ credentialsId }) => {
+        if (credentialsId === currentCredentialsId)
+          onCredentialsSelect(undefined);
+        refetch();
+      },
+      onSettled: () => {
+        setIsDeleting(undefined);
+      },
+    }),
+  );
 
   const currentCredential = data?.credentials.find(
     (c) => c.id === currentCredentialsId,
@@ -99,34 +107,37 @@ export const ForgedCredentialsDropdown = ({
     (credentialsId: string) => async (e: React.MouseEvent) => {
       if (!workspace) return;
       e.stopPropagation();
-      mutate({ workspaceId: workspace.id, credentialsId });
+      mutate(
+        scope === "workspace"
+          ? {
+              scope: "workspace",
+              workspaceId: workspace.id,
+              credentialsId,
+            }
+          : {
+              scope: "user",
+              credentialsId,
+            },
+      );
     };
 
   if (!data || data?.credentials.length === 0) {
     return (
       <Button
-        colorScheme="gray"
-        textAlign="left"
-        leftIcon={<PlusIcon />}
+        variant="secondary"
+        className="text-left"
         onClick={onAddClick}
-        isDisabled={currentRole === "GUEST"}
-        isLoading={isLoading}
+        disabled={currentUserMode === "guest" || isLoading}
         {...props}
       >
+        <PlusIcon />
         Add {blockDef.auth?.name}
       </Button>
     );
   }
   return (
-    <Menu isLazy>
-      <MenuButton
-        as={Button}
-        rightIcon={<ChevronLeftIcon transform={"rotate(-90deg)"} />}
-        colorScheme="gray"
-        justifyContent="space-between"
-        textAlign="left"
-        {...props}
-      >
+    <Menu.Root>
+      <Menu.TriggerButton variant="secondary" className="justify-between">
         <Text
           noOfLines={1}
           overflowY="visible"
@@ -136,44 +147,37 @@ export const ForgedCredentialsDropdown = ({
             ? currentCredential.name
             : `Select ${blockDef.auth?.name}`}
         </Text>
-      </MenuButton>
-      <MenuList>
+        <ChevronDownIcon />
+      </Menu.TriggerButton>
+      <Menu.Popup>
         <Stack maxH={"35vh"} overflowY="auto" spacing="0">
           {data?.credentials.map((credentials) => (
-            <MenuItem
-              role="menuitem"
-              minH="40px"
+            <Menu.Item
               key={credentials.id}
               onClick={handleMenuItemClick(credentials.id)}
-              fontSize="16px"
-              fontWeight="normal"
-              rounded="none"
-              justifyContent="space-between"
+              className="justify-between"
             >
               {credentials.name}
-              <IconButton
-                icon={<TrashIcon />}
+              <Button
+                size="icon"
+                className="size-7 [&_svg]:size-3"
                 aria-label="Remove credentials"
-                size="xs"
+                variant="secondary"
                 onClick={deleteCredentials(credentials.id)}
-                isLoading={isDeleting === credentials.id}
-              />
-            </MenuItem>
+                disabled={isDeleting === credentials.id}
+              >
+                <TrashIcon />
+              </Button>
+            </Menu.Item>
           ))}
-          {currentRole === "GUEST" ? null : (
-            <MenuItem
-              maxW="500px"
-              overflow="hidden"
-              whiteSpace="nowrap"
-              textOverflow="ellipsis"
-              icon={<PlusIcon />}
-              onClick={onAddClick}
-            >
-              Connect new
-            </MenuItem>
+          {currentUserMode === "guest" ? null : (
+            <Menu.Item onClick={onAddClick}>
+              <PlusIcon />
+              {t("connectNew")}
+            </Menu.Item>
           )}
         </Stack>
-      </MenuList>
-    </Menu>
+      </Menu.Popup>
+    </Menu.Root>
   );
 };

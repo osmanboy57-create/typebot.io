@@ -1,3 +1,4 @@
+import { Portal } from "@/components/Portal";
 import { useTypebot } from "@/features/editor/providers/TypebotProvider";
 import {
   type DraggableItem,
@@ -7,7 +8,6 @@ import {
 import { useGraph } from "@/features/graph/providers/GraphProvider";
 import {
   Flex,
-  Portal,
   Stack,
   Text,
   useColorModeValue,
@@ -15,6 +15,7 @@ import {
 } from "@chakra-ui/react";
 import type { Coordinates } from "@dnd-kit/utilities";
 import { useTranslate } from "@tolgee/react";
+import { shouldOpenItemSettingsOnCreation } from "@typebot.io/blocks-core/helpers";
 import type {
   BlockIndices,
   BlockWithItems,
@@ -27,6 +28,7 @@ import { useEffect, useRef, useState } from "react";
 import { BlockSourceEndpoint } from "../../endpoints/BlockSourceEndpoint";
 import { PlaceholderNode } from "../PlaceholderNode";
 import { ItemNode } from "./ItemNode";
+import { getItemName } from "./getItemName";
 
 type Props = {
   block: BlockWithItems;
@@ -40,7 +42,7 @@ export const ItemNodesList = ({
   const { typebot, createItem, detachItemFromBlock } = useTypebot();
   const { draggedItem, setDraggedItem, mouseOverBlock } = useBlockDnd();
   const placeholderRefs = useRef<HTMLDivElement[]>([]);
-  const { graphPosition } = useGraph();
+  const { graphPosition, setOpenedNodeId } = useGraph();
   const isDraggingOnCurrentBlock =
     (draggedItem && mouseOverBlock?.id === block.id) ?? false;
   const showPlaceholders =
@@ -49,12 +51,6 @@ export const ItemNodesList = ({
   const isLastBlock =
     isDefined(typebot) &&
     typebot.groups.at(groupIndex)?.blocks?.at(blockIndex + 1) === undefined;
-
-  const someChoiceItemsAreNotConnected =
-    block.type === InputBlockType.CHOICE ||
-    block.type === InputBlockType.PICTURE_CHOICE
-      ? block.items.some((item) => item.outgoingEdgeId === undefined)
-      : true;
 
   const [position, setPosition] = useState({
     x: 0,
@@ -144,15 +140,27 @@ export const ItemNodesList = ({
 
   const groupId = typebot?.groups.at(groupIndex)?.id;
 
+  const itemName = getItemName(block.type);
+
+  const insertItem = (itemIndex: number) => {
+    const newItemId = createItem({}, { groupIndex, blockIndex, itemIndex });
+    if (newItemId && shouldOpenItemSettingsOnCreation(block.type))
+      setOpenedNodeId(newItemId);
+  };
+
   return (
-    <Stack flex={1} spacing={1} maxW="full" onClick={stopPropagating}>
+    <Stack flex={1} spacing={0} maxW="full" onClick={stopPropagating}>
       <PlaceholderNode
         isVisible={showPlaceholders}
         isExpanded={expandedPlaceholderIndex === 0}
-        onRef={handlePushElementRef(0)}
-      />
+        ref={handlePushElementRef(0)}
+        onClick={() => insertItem(0)}
+        initialHeightPixels={5}
+      >
+        Add {itemName}
+      </PlaceholderNode>
       {block.items.map((item, idx) => (
-        <Stack key={item.id} spacing={1}>
+        <Stack key={item.id} spacing={0}>
           <ItemNode
             item={item}
             block={block}
@@ -162,11 +170,14 @@ export const ItemNodesList = ({
           <PlaceholderNode
             isVisible={showPlaceholders}
             isExpanded={expandedPlaceholderIndex === idx + 1}
-            onRef={handlePushElementRef(idx + 1)}
-          />
+            ref={handlePushElementRef(idx + 1)}
+            onClick={() => insertItem(idx + 1)}
+          >
+            Add {itemName}
+          </PlaceholderNode>
         </Stack>
       ))}
-      {isLastBlock && someChoiceItemsAreNotConnected && groupId && (
+      {checkIfDefaultItemIsNeeded(block, isLastBlock) && groupId && (
         <DefaultItemNode block={block} groupId={groupId} />
       )}
 
@@ -211,7 +222,7 @@ const DefaultItemNode = ({
       py="2"
       borderWidth="1px"
       borderColor={useColorModeValue("gray.300", undefined)}
-      bgColor={useColorModeValue("gray.50", "gray.850")}
+      bgColor={useColorModeValue("gray.50", "gray.900")}
       rounded="md"
       pos="relative"
       align="center"
@@ -232,4 +243,25 @@ const DefaultItemNode = ({
       />
     </Flex>
   );
+};
+
+const checkIfDefaultItemIsNeeded = (
+  block: BlockWithItems,
+  isLastBlock: boolean,
+) => {
+  if (!isLastBlock) return false;
+  if (block.outgoingEdgeId || block.type === LogicBlockType.CONDITION)
+    return true;
+  if (block.items.length === 1) return false;
+  if (block.type === InputBlockType.CARDS) {
+    return block.items.some((item) =>
+      item.paths?.some((path) => path.outgoingEdgeId === undefined),
+    );
+  }
+  if (
+    block.type === InputBlockType.CHOICE ||
+    block.type === InputBlockType.PICTURE_CHOICE
+  )
+    return block.items.some((item) => item.outgoingEdgeId === undefined);
+  return true;
 };

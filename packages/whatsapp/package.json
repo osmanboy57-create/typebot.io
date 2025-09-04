@@ -6,10 +6,10 @@
   "exports": {
     "./*": "./src/*.ts"
   },
+  "scripts": {
+    "test": "dotenv -e ./.env -e ../../.env -- vitest run"
+  },
   "dependencies": {
-    "@sentry/nextjs": "8.33.1",
-    "@trpc/server": "10.40.0",
-    "@typebot.io/blocks-base": "workspace:*",
     "@typebot.io/blocks-core": "workspace:*",
     "@typebot.io/bot-engine": "workspace:*",
     "@typebot.io/conditions": "workspace:*",
@@ -24,9 +24,16 @@
     "@typebot.io/blocks-bubbles": "workspace:*",
     "@typebot.io/blocks-inputs": "workspace:*",
     "@typebot.io/prisma": "workspace:*",
-    "ky": "1.2.4"
+    "@typebot.io/chat-session": "workspace:*",
+    "@typebot.io/credentials": "workspace:*",
+    "@typebot.io/chat-api": "workspace:*",
+    "@sentry/nextjs": "10.8.0",
+    "ky": "1.2.4",
+    "@typebot.io/runtime-session-store": "workspace:*"
   },
   "devDependencies": {
-    "@typebot.io/tsconfig": "workspace:*"
+    "@typebot.io/tsconfig": "workspace:*",
+    "vitest": "3.2.4",
+    "vite-tsconfig-paths": "5.1.4"
   }
 }

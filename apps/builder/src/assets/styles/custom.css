@@ -19,3 +19,7 @@ audio::-webkit-media-controls-timeline {
 audio::-webkit-media-controls-panel {
   justify-content: space-between;
 }
+
+.md-link {
+  text-decoration: underline;
+}

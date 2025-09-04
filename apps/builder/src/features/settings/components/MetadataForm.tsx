@@ -2,19 +2,14 @@ import { ImageUploadContent } from "@/components/ImageUploadContent";
 import { MoreInfoTooltip } from "@/components/MoreInfoTooltip";
 import { TextInput, Textarea } from "@/components/inputs";
 import { CodeEditor } from "@/components/inputs/CodeEditor";
-import {
-  FormLabel,
-  HStack,
-  Image,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-  Stack,
-  Text,
-} from "@chakra-ui/react";
+import { SwitchWithLabel } from "@/components/inputs/SwitchWithLabel";
+import { useOpenControls } from "@/hooks/useOpenControls";
+import { FormLabel, HStack, Image, Stack, Text } from "@chakra-ui/react";
+import { useTranslate } from "@tolgee/react";
 import { env } from "@typebot.io/env";
 import { defaultSettings } from "@typebot.io/settings/constants";
 import type { Settings } from "@typebot.io/settings/schemas";
+import { Popover } from "@typebot.io/ui/components/Popover";
 import React from "react";
 
 type Props = {
@@ -32,6 +27,9 @@ export const MetadataForm = ({
   metadata,
   onMetadataChange,
 }: Props) => {
+  const { t } = useTranslate();
+  const favIconPopoverControls = useOpenControls();
+  const imagePopoverControls = useOpenControls();
   const handleTitleChange = (title: string) =>
     onMetadataChange({ ...metadata, title });
   const handleDescriptionChange = (description: string) =>
@@ -44,6 +42,8 @@ export const MetadataForm = ({
     onMetadataChange({ ...metadata, googleTagManagerId });
   const handleHeadCodeChange = (customHeadCode: string) =>
     onMetadataChange({ ...metadata, customHeadCode });
+  const handleAllowIndexingChange = (allowIndexing: boolean) =>
+    onMetadataChange({ ...metadata, allowIndexing });
 
   const favIconUrl =
     metadata?.favIconUrl ??
@@ -57,21 +57,24 @@ export const MetadataForm = ({
     <Stack spacing="6">
       <Stack>
         <FormLabel mb="0" htmlFor="icon">
-          Icon:
+          {t("settings.sideMenu.metadata.icon.label")}
         </FormLabel>
-        <Popover isLazy placement="top">
-          <PopoverTrigger>
-            <Image
-              src={favIconUrl}
-              w="20px"
-              alt="Fav icon"
-              cursor="pointer"
-              _hover={{ filter: "brightness(.9)" }}
-              transition="filter 200ms"
-              rounded="md"
-            />
-          </PopoverTrigger>
-          <PopoverContent p="4" w="400px">
+        <Popover.Root {...favIconPopoverControls}>
+          <Popover.Trigger
+            render={(props) => (
+              <Image
+                {...props}
+                src={favIconUrl}
+                w="20px"
+                alt="Fav icon"
+                cursor="pointer"
+                _hover={{ filter: "brightness(.9)" }}
+                transition="filter 200ms"
+                rounded="md"
+              />
+            )}
+          />
+          <Popover.Popup className="w-[400px]" side="right">
             <ImageUploadContent
               uploadFileProps={{
                 workspaceId,
@@ -80,18 +83,20 @@ export const MetadataForm = ({
               }}
               defaultUrl={favIconUrl}
               onSubmit={handleFavIconSubmit}
-              excludedTabs={["giphy", "unsplash", "emoji"]}
+              additionalTabs={{
+                icon: true,
+              }}
               imageSize="thumb"
             />
-          </PopoverContent>
-        </Popover>
+          </Popover.Popup>
+        </Popover.Root>
       </Stack>
       <Stack>
         <FormLabel mb="0" htmlFor="image">
-          Image:
+          {t("settings.sideMenu.metadata.image.label")}
         </FormLabel>
-        <Popover isLazy placement="top">
-          <PopoverTrigger>
+        <Popover.Root {...imagePopoverControls}>
+          <Popover.Trigger>
             <Image
               src={imageUrl}
               alt="Website image"
@@ -100,8 +105,8 @@ export const MetadataForm = ({
               transition="filter 200ms"
               rounded="md"
             />
-          </PopoverTrigger>
-          <PopoverContent p="4" w="500px">
+          </Popover.Trigger>
+          <Popover.Popup className="w-[500px]" side="right">
             <ImageUploadContent
               uploadFileProps={{
                 workspaceId,
@@ -110,13 +115,15 @@ export const MetadataForm = ({
               }}
               defaultUrl={imageUrl}
               onSubmit={handleImageSubmit}
-              excludedTabs={["giphy", "icon", "emoji"]}
+              additionalTabs={{
+                unsplash: true,
+              }}
             />
-          </PopoverContent>
-        </Popover>
+          </Popover.Popup>
+        </Popover.Root>
       </Stack>
       <TextInput
-        label="Title:"
+        label={t("settings.sideMenu.metadata.title.label")}
         defaultValue={metadata?.title ?? typebotName}
         onChange={handleTitleChange}
       />
@@ -125,21 +132,20 @@ export const MetadataForm = ({
           metadata?.description ?? defaultSettings.metadata.description
         }
         onChange={handleDescriptionChange}
-        label="Description:"
+        label={t("settings.sideMenu.metadata.description.label")}
       />
       <TextInput
         defaultValue={metadata?.googleTagManagerId}
         placeholder="GTM-XXXXXX"
         onChange={handleGoogleTagManagerIdChange}
         label="Google Tag Manager ID:"
-        moreInfoTooltip="Do not include it if you are embedding your typebot in an existing website. GTM should be installed in the parent website instead."
+        moreInfoTooltip={t("settings.sideMenu.metadata.gtm.tooltip")}
       />
       <Stack>
         <HStack as={FormLabel} mb="0" htmlFor="head">
-          <Text>Custom head code:</Text>
+          <Text>{t("settings.sideMenu.metadata.headCode.label")}</Text>
           <MoreInfoTooltip>
-            Will be pasted at the bottom of the header section, just above the
-            closing head tag. Only `meta` and `script` tags are allowed.
+            {t("settings.sideMenu.metadata.headCode.tooltip")}
           </MoreInfoTooltip>
         </HStack>
         <CodeEditor
@@ -150,6 +156,12 @@ export const MetadataForm = ({
           withVariableButton={false}
         />
       </Stack>
+      <SwitchWithLabel
+        label={t("settings.sideMenu.metadata.allowIndexing.label")}
+        initialValue={metadata?.allowIndexing}
+        onCheckChange={handleAllowIndexingChange}
+        moreInfoContent={t("settings.sideMenu.metadata.allowIndexing.tooltip")}
+      />
     </Stack>
   );
 };

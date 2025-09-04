@@ -1,12 +1,6 @@
-import {
-  Button,
-  GridItem,
-  Input,
-  SimpleGrid,
-  Stack,
-  Text,
-} from "@chakra-ui/react";
+import { GridItem, Input, SimpleGrid, Stack, Text } from "@chakra-ui/react";
 import { useTranslate } from "@tolgee/react";
+import { Button } from "@typebot.io/ui/components/Button";
 import emojiTagsData from "emojilib";
 import type { ChangeEvent } from "react";
 import { useEffect, useRef, useState } from "react";
@@ -111,10 +105,10 @@ export const EmojiSearchableList = ({
         placeholder={t("emojiList.searchInput.placeholder")}
         onChange={handleSearchChange}
       />
-      <Stack ref={scrollContainer} overflowY="scroll" maxH="350px" spacing={4}>
+      <Stack ref={scrollContainer} overflowY="auto" maxH="350px" spacing={4}>
         {recentEmojis.length > 0 && (
           <Stack>
-            <Text fontSize="xs" color="gray.400" fontWeight="semibold" pl="2">
+            <Text fontSize="xs" color="gray.400" fontWeight="medium" pl="2">
               {t("emojiList.categories.recent.label")}
             </Text>
             <EmojiGrid emojis={recentEmojis} onEmojiClick={selectEmoji} />
@@ -122,7 +116,7 @@ export const EmojiSearchableList = ({
         )}
         {filteredPeople.length > 0 && (
           <Stack>
-            <Text fontSize="xs" color="gray.400" fontWeight="semibold" pl="2">
+            <Text fontSize="xs" color="gray.400" fontWeight="medium" pl="2">
               {t("emojiList.categories.people.label")}
             </Text>
             <EmojiGrid emojis={filteredPeople} onEmojiClick={selectEmoji} />
@@ -130,7 +124,7 @@ export const EmojiSearchableList = ({
         )}
         {filteredAnimals.length > 0 && totalDisplayedCategories >= 2 && (
           <Stack>
-            <Text fontSize="xs" color="gray.400" fontWeight="semibold" pl="2">
+            <Text fontSize="xs" color="gray.400" fontWeight="medium" pl="2">
               {t("emojiList.categories.animalsAndNature.label")}
             </Text>
             <EmojiGrid emojis={filteredAnimals} onEmojiClick={selectEmoji} />
@@ -138,7 +132,7 @@ export const EmojiSearchableList = ({
         )}
         {filteredFood.length > 0 && totalDisplayedCategories >= 3 && (
           <Stack>
-            <Text fontSize="xs" color="gray.400" fontWeight="semibold" pl="2">
+            <Text fontSize="xs" color="gray.400" fontWeight="medium" pl="2">
               {t("emojiList.categories.foodAndDrink.label")}
             </Text>
             <EmojiGrid emojis={filteredFood} onEmojiClick={selectEmoji} />
@@ -146,7 +140,7 @@ export const EmojiSearchableList = ({
         )}
         {filteredTravel.length > 0 && totalDisplayedCategories >= 4 && (
           <Stack>
-            <Text fontSize="xs" color="gray.400" fontWeight="semibold" pl="2">
+            <Text fontSize="xs" color="gray.400" fontWeight="medium" pl="2">
               {t("emojiList.categories.travelAndPlaces.label")}
             </Text>
             <EmojiGrid emojis={filteredTravel} onEmojiClick={selectEmoji} />
@@ -154,7 +148,7 @@ export const EmojiSearchableList = ({
         )}
         {filteredActivities.length > 0 && totalDisplayedCategories >= 5 && (
           <Stack>
-            <Text fontSize="xs" color="gray.400" fontWeight="semibold" pl="2">
+            <Text fontSize="xs" color="gray.400" fontWeight="medium" pl="2">
               {t("emojiList.categories.activities.label")}
             </Text>
             <EmojiGrid emojis={filteredActivities} onEmojiClick={selectEmoji} />
@@ -162,7 +156,7 @@ export const EmojiSearchableList = ({
         )}
         {filteredObjects.length > 0 && totalDisplayedCategories >= 6 && (
           <Stack>
-            <Text fontSize="xs" color="gray.400" fontWeight="semibold" pl="2">
+            <Text fontSize="xs" color="gray.400" fontWeight="medium" pl="2">
               {t("emojiList.categories.objects.label")}
             </Text>
             <EmojiGrid emojis={filteredObjects} onEmojiClick={selectEmoji} />
@@ -170,7 +164,7 @@ export const EmojiSearchableList = ({
         )}
         {filteredSymbols.length > 0 && totalDisplayedCategories >= 7 && (
           <Stack>
-            <Text fontSize="xs" color="gray.400" fontWeight="semibold" pl="2">
+            <Text fontSize="xs" color="gray.400" fontWeight="medium" pl="2">
               {t("emojiList.categories.symbols.label")}
             </Text>
             <EmojiGrid emojis={filteredSymbols} onEmojiClick={selectEmoji} />
@@ -178,7 +172,7 @@ export const EmojiSearchableList = ({
         )}
         {filteredFlags.length > 0 && totalDisplayedCategories >= 8 && (
           <Stack>
-            <Text fontSize="xs" color="gray.400" fontWeight="semibold" pl="2">
+            <Text fontSize="xs" color="gray.400" fontWeight="medium" pl="2">
               {t("emojiList.categories.flags.label")}
             </Text>
             <EmojiGrid emojis={filteredFlags} onEmojiClick={selectEmoji} />
@@ -210,7 +204,7 @@ const EmojiGrid = ({
           onClick={handleClick(emoji)}
           variant="ghost"
           size="sm"
-          fontSize="xl"
+          className="text-2xl"
           key={emoji}
         >
           {emoji}

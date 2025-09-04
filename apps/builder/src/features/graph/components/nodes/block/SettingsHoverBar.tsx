@@ -1,75 +1,81 @@
-import { BuoyIcon, ExpandIcon } from "@/components/icons";
-import { getHelpDocUrl } from "@/features/graph/helpers/getHelpDocUrl";
-import { VideoOnboardingPopover } from "@/features/onboarding/components/VideoOnboardingPopover";
+import { ButtonLink } from "@/components/ButtonLink";
 import {
-  Button,
-  HStack,
-  IconButton,
-  Link,
-  useColorModeValue,
-} from "@chakra-ui/react";
+  BuoyIcon,
+  ExpandIcon,
+  MinimizeIcon,
+  VideoPopoverIcon,
+} from "@/components/icons";
+import { getHelpDocUrl } from "@/features/graph/helpers/getHelpDocUrl";
+import { HStack, useColorModeValue } from "@chakra-ui/react";
 import { useTranslate } from "@tolgee/react";
 import type { BlockWithOptions } from "@typebot.io/blocks-core/schemas/schema";
+import type { TEventWithOptions } from "@typebot.io/events/schemas";
 import type { forgedBlocks } from "@typebot.io/forge-repository/definitions";
+import { Button } from "@typebot.io/ui/components/Button";
+import { cn } from "@typebot.io/ui/lib/cn";
 
 type Props = {
-  blockType: BlockWithOptions["type"];
+  nodeType: BlockWithOptions["type"] | TEventWithOptions["type"];
   blockDef?: (typeof forgedBlocks)[keyof typeof forgedBlocks];
   isVideoOnboardingItemDisplayed: boolean;
+  isExpanded: boolean;
   onExpandClick: () => void;
   onVideoOnboardingClick: () => void;
 };
 
 export const SettingsHoverBar = ({
-  blockType,
+  nodeType,
   blockDef,
   isVideoOnboardingItemDisplayed,
+  isExpanded,
   onExpandClick,
   onVideoOnboardingClick,
 }: Props) => {
   const { t } = useTranslate();
-  const helpDocUrl = getHelpDocUrl(blockType, blockDef);
+  const helpDocUrl = getHelpDocUrl(nodeType, blockDef);
   return (
     <HStack
       rounded="md"
       spacing={0}
       borderWidth="1px"
-      bgColor={useColorModeValue("white", "gray.800")}
+      bgColor={useColorModeValue("white", "gray.900")}
       shadow="md"
     >
-      <IconButton
-        icon={<ExpandIcon />}
-        borderRightWidth="1px"
-        borderRightRadius="none"
-        borderLeftRadius="none"
+      <Button
+        className="size-6 border-r border-l-0 rounded-r-none [&_svg]:size-3"
         aria-label={"Duplicate group"}
-        variant="ghost"
         onClick={onExpandClick}
-        size="xs"
-      />
+        size="icon"
+        variant="ghost"
+      >
+        {isExpanded ? <MinimizeIcon /> : <ExpandIcon />}
+      </Button>
       {helpDocUrl && (
-        <Button
-          as={Link}
-          leftIcon={<BuoyIcon />}
-          borderLeftRadius="none"
-          borderRightRadius={
-            isVideoOnboardingItemDisplayed ? "none" : undefined
-          }
-          borderRightWidth={isVideoOnboardingItemDisplayed ? "1px" : undefined}
+        <ButtonLink
+          className={cn(
+            "rounded-l-none h-6",
+            isVideoOnboardingItemDisplayed && "rounded-r-none",
+          )}
           size="xs"
           variant="ghost"
           href={helpDocUrl}
-          isExternal
+          target="_blank"
+          iconStyle="none"
         >
+          <BuoyIcon />
           {t("help")}
-        </Button>
+        </ButtonLink>
       )}
       {isVideoOnboardingItemDisplayed && (
-        <VideoOnboardingPopover.TriggerIconButton
+        <Button
+          aria-label={"Open Bubbles help video"}
+          variant="ghost"
           onClick={onVideoOnboardingClick}
-          size="xs"
-          borderLeftRadius="none"
-        />
+          className="rounded-l-none size-6 [&_svg]:size-3"
+          size="icon"
+        >
+          <VideoPopoverIcon />
+        </Button>
       )}
     </HStack>
   );

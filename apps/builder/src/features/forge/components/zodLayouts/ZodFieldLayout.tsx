@@ -1,28 +1,25 @@
-import { DropdownList } from "@/components/DropdownList";
+import { MoreInfoTooltip } from "@/components/MoreInfoTooltip";
 import { PrimitiveList } from "@/components/PrimitiveList";
 import { TableList } from "@/components/TableList";
 import { TagsInput } from "@/components/TagsInput";
 import { NumberInput, TextInput, Textarea } from "@/components/inputs";
+import { BasicSelect } from "@/components/inputs/BasicSelect";
 import { CodeEditor } from "@/components/inputs/CodeEditor";
 import { SwitchWithLabel } from "@/components/inputs/SwitchWithLabel";
 import { VariableSearchInput } from "@/components/inputs/VariableSearchInput";
-import {
-  Accordion,
-  AccordionButton,
-  AccordionIcon,
-  AccordionItem,
-  AccordionPanel,
-  FormLabel,
-  Stack,
-  Text,
-} from "@chakra-ui/react";
+import { FormLabel, Stack } from "@chakra-ui/react";
 import type { ForgedBlockDefinition } from "@typebot.io/forge-repository/definitions";
 import type { ForgedBlock } from "@typebot.io/forge-repository/schemas";
 import { evaluateIsHidden } from "@typebot.io/forge/helpers/evaluateIsHidden";
+import { Field } from "@typebot.io/ui/components/Field";
 import type { ZodLayoutMetadata } from "@typebot.io/zod";
 import Markdown, { type Components } from "react-markdown";
 import type { ZodTypeAny, z } from "zod";
 import { getZodInnerSchema } from "../../helpers/getZodInnerSchema";
+import {
+  AutocompleteInput,
+  ForgeAutocompleteInput,
+} from "../ForgeAutocompleteInput";
 import { ForgeSelectInput } from "../ForgeSelectInput";
 import { ZodDiscriminatedUnionLayout } from "./ZodDiscriminatedUnionLayout";
 import { ZodObjectLayout } from "./ZodObjectLayout";
@@ -55,7 +52,6 @@ const mdComponents = {
   ),
 } satisfies Components;
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 export const ZodFieldLayout = ({
   data,
   schema,
@@ -80,6 +76,24 @@ export const ZodFieldLayout = ({
 
   if (evaluateIsHidden(layout?.isHidden, blockOptions)) return null;
 
+  if (layout?.inputType === "variableDropdown") {
+    return (
+      <VariableSearchInput
+        initialVariableId={data}
+        onSelectVariable={(variable) => onDataChange(variable?.id)}
+        placeholder={layout?.placeholder}
+        label={layout?.label}
+        moreInfoTooltip={layout.moreInfoTooltip}
+        helperText={
+          layout?.helperText ? (
+            <Markdown components={mdComponents}>{layout.helperText}</Markdown>
+          ) : undefined
+        }
+        width="full"
+      />
+    );
+  }
+
   switch (innerSchema._def.typeName) {
     case "ZodObject":
       return (
@@ -100,36 +114,14 @@ export const ZodFieldLayout = ({
           schema={
             innerSchema as z.ZodDiscriminatedUnion<string, z.ZodObject<any>[]>
           }
-          dropdownPlaceholder={`Select a ${innerSchema._def.discriminator}`}
+          dropdownPlaceholder={
+            layout?.placeholder ?? `Select a ${innerSchema._def.discriminator}`
+          }
           onDataChange={onDataChange}
         />
       );
     }
     case "ZodArray": {
-      if (layout?.accordion)
-        return (
-          <Accordion allowToggle>
-            <AccordionItem>
-              <AccordionButton>
-                <Text w="full" textAlign="left">
-                  {layout?.accordion}
-                </Text>
-                <AccordionIcon />
-              </AccordionButton>
-              <AccordionPanel as={Stack} pt="4">
-                <ZodArrayContent
-                  data={data}
-                  schema={innerSchema}
-                  blockDef={blockDef}
-                  blockOptions={blockOptions}
-                  layout={layout}
-                  onDataChange={onDataChange}
-                  isInAccordion
-                />
-              </AccordionPanel>
-            </AccordionItem>
-          </Accordion>
-        );
       return (
         <ZodArrayContent
           data={data}
@@ -143,21 +135,28 @@ export const ZodFieldLayout = ({
     }
     case "ZodEnum": {
       return (
-        <DropdownList
-          currentItem={data ?? layout?.defaultValue}
-          onItemSelect={onDataChange}
-          items={parseEnumItems(innerSchema, layout)}
-          label={layout?.label}
-          helperText={
-            layout?.helperText ? (
+        <Field.Root>
+          {layout?.label && (
+            <Field.Label>
+              {layout.label}
+              {layout.moreInfoTooltip && (
+                <MoreInfoTooltip>{layout.moreInfoTooltip}</MoreInfoTooltip>
+              )}
+            </Field.Label>
+          )}
+          <BasicSelect
+            value={data}
+            defaultValue={layout?.defaultValue}
+            onChange={onDataChange}
+            items={parseEnumItems(innerSchema, layout)}
+            placeholder={layout?.placeholder}
+          />
+          {layout?.helperText && (
+            <Field.Description>
               <Markdown components={mdComponents}>{layout.helperText}</Markdown>
-            ) : undefined
-          }
-          moreInfoTooltip={layout?.moreInfoTooltip}
-          placeholder={layout?.placeholder}
-          direction={layout?.direction}
-          width={width}
-        />
+            </Field.Description>
+          )}
+        </Field.Root>
       );
     }
     case "ZodNumber":
@@ -192,15 +191,12 @@ export const ZodFieldLayout = ({
       );
     }
     case "ZodString": {
-      if (layout?.fetcher) {
-        if (!blockDef) return null;
+      if (layout?.autoCompleteItems) {
         return (
-          <ForgeSelectInput
+          <AutocompleteInput
+            items={layout.autoCompleteItems}
             defaultValue={data ?? layout.defaultValue}
             placeholder={layout.placeholder}
-            fetcherId={layout.fetcher}
-            options={blockOptions}
-            blockDef={blockDef}
             label={layout.label}
             helperText={
               layout?.helperText ? (
@@ -216,14 +212,40 @@ export const ZodFieldLayout = ({
           />
         );
       }
-      if (layout?.inputType === "variableDropdown") {
+      if (layout?.fetcher) {
+        if (!blockDef) return null;
+        if (layout.allowCustomText)
+          return (
+            <ForgeAutocompleteInput
+              defaultValue={data ?? layout.defaultValue}
+              placeholder={layout.placeholder}
+              fetcherId={layout.fetcher}
+              options={blockOptions}
+              blockDef={blockDef}
+              label={layout.label}
+              credentialsScope="workspace"
+              helperText={
+                layout?.helperText ? (
+                  <Markdown components={mdComponents}>
+                    {layout.helperText}
+                  </Markdown>
+                ) : undefined
+              }
+              moreInfoTooltip={layout?.moreInfoTooltip}
+              onChange={onDataChange}
+              width={width}
+              withVariableButton={layout.withVariableButton ?? true}
+            />
+          );
         return (
-          <VariableSearchInput
-            initialVariableId={data}
-            onSelectVariable={(variable) => onDataChange(variable?.id)}
-            placeholder={layout?.placeholder}
-            label={layout?.label}
-            moreInfoTooltip={layout.moreInfoTooltip}
+          <ForgeSelectInput
+            defaultValue={data ?? layout.defaultValue}
+            placeholder={layout.placeholder}
+            fetcherId={layout.fetcher}
+            options={blockOptions}
+            blockDef={blockDef}
+            label={layout.label}
+            credentialsScope="workspace"
             helperText={
               layout?.helperText ? (
                 <Markdown components={mdComponents}>
@@ -231,7 +253,10 @@ export const ZodFieldLayout = ({
                 </Markdown>
               ) : undefined
             }
+            moreInfoTooltip={layout?.moreInfoTooltip}
+            onChange={onDataChange}
             width={width}
+            withVariableButton={layout.withVariableButton ?? true}
           />
         );
       }
@@ -278,6 +303,7 @@ export const ZodFieldLayout = ({
             onChange={onDataChange}
             width={width}
             debounceTimeout={layout?.isDebounceDisabled ? 0 : undefined}
+            withLineNumbers={true}
           />
         );
       return (
@@ -300,6 +326,8 @@ export const ZodFieldLayout = ({
         />
       );
     }
+    default:
+      return null;
   }
 };
 

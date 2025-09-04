@@ -3,7 +3,7 @@ import { VariableTag } from "@/features/graph/components/nodes/block/VariableTag
 import { Box, Image, Text } from "@chakra-ui/react";
 import { useTranslate } from "@tolgee/react";
 import type { ImageBubbleBlock } from "@typebot.io/blocks-bubbles/image/schema";
-import { findUniqueVariable } from "@typebot.io/variables/findUniqueVariableValue";
+import { findUniqueVariable } from "@typebot.io/variables/findUniqueVariable";
 
 type Props = {
   block: ImageBubbleBlock;
@@ -27,6 +27,9 @@ export const ImageBubbleContent = ({ block }: Props) => {
         pointerEvents="none"
         src={block.content?.url}
         alt="Group image"
+        maxH={
+          block.content?.url.startsWith("data:image/svg") ? "80px" : undefined
+        }
         rounded="md"
         objectFit="cover"
       />

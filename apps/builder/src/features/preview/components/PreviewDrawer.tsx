@@ -1,7 +1,6 @@
 import { useGraph } from "@/features/graph/providers/GraphProvider";
+import { useRightPanel } from "@/hooks/useRightPanel";
 import {
-  Button,
-  CloseButton,
   Fade,
   Flex,
   HStack,
@@ -9,10 +8,11 @@ import {
   useColorModeValue,
 } from "@chakra-ui/react";
 import { useTranslate } from "@tolgee/react";
+import { Button } from "@typebot.io/ui/components/Button";
+import { CloseIcon } from "@typebot.io/ui/icons/CloseIcon";
 import { useDrag } from "@use-gesture/react";
 import React, { useState } from "react";
 import { headerHeight } from "../../editor/constants";
-import { useEditor } from "../../editor/providers/EditorProvider";
 import { useTypebot } from "../../editor/providers/TypebotProvider";
 import { runtimes } from "../data";
 import { PreviewDrawerBody } from "./PreviewDrawerBody";
@@ -32,7 +32,6 @@ const getDefaultRuntime = (typebotId?: string) => {
 export const PreviewDrawer = () => {
   const { typebot, save, isSavingLoading } = useTypebot();
   const { t } = useTranslate();
-  const { setRightPanel } = useEditor();
   const { setPreviewingBlock } = useGraph();
   const [width, setWidth] = useState(500);
   const [isResizeHandleVisible, setIsResizeHandleVisible] = useState(false);
@@ -40,6 +39,7 @@ export const PreviewDrawer = () => {
   const [selectedRuntime, setSelectedRuntime] = useState<
     (typeof runtimes)[number]
   >(getDefaultRuntime(typebot?.id));
+  const [, setRightPanel] = useRightPanel();
 
   const handleRestartClick = async () => {
     await save();
@@ -48,7 +48,7 @@ export const PreviewDrawer = () => {
 
   const handleCloseClick = () => {
     setPreviewingBlock(undefined);
-    setRightPanel(undefined);
+    setRightPanel(null);
   };
 
   const useResizeHandleDrag = useDrag(
@@ -73,9 +73,9 @@ export const PreviewDrawer = () => {
       right="0"
       top={`0`}
       h={`100%`}
-      bgColor={useColorModeValue("white", "gray.900")}
+      bgColor={useColorModeValue("white", "gray.950")}
       borderLeftWidth={"1px"}
-      shadow="lg"
+      shadow="md"
       borderLeftRadius={"lg"}
       onMouseOver={() => setIsResizeHandleVisible(true)}
       onMouseLeave={() => setIsResizeHandleVisible(false)}
@@ -102,7 +102,7 @@ export const PreviewDrawer = () => {
             {selectedRuntime.name === "Web" ? (
               <Button
                 onClick={handleRestartClick}
-                isLoading={isSavingLoading}
+                disabled={isSavingLoading}
                 variant="ghost"
               >
                 {t("preview.restartButton.label")}
@@ -110,7 +110,9 @@ export const PreviewDrawer = () => {
             ) : null}
           </HStack>
 
-          <CloseButton onClick={handleCloseClick} />
+          <Button onClick={handleCloseClick} variant="secondary" size="icon">
+            <CloseIcon />
+          </Button>
         </HStack>
         <PreviewDrawerBody key={restartKey} runtime={selectedRuntime.name} />
       </VStack>

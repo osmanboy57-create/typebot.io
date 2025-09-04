@@ -1,23 +1,42 @@
 import type { GoogleSheetsUpdateRowOptions } from "@typebot.io/blocks-integrations/googleSheets/schema";
+import type { SessionState } from "@typebot.io/chat-session/schemas";
+import { getGoogleSpreadsheet } from "@typebot.io/credentials/getGoogleSpreadsheet";
+import { parseUnknownError } from "@typebot.io/lib/parseUnknownError";
+import type { LogInSession } from "@typebot.io/logs/schemas";
+import type { SessionStore } from "@typebot.io/runtime-session-store";
 import { deepParseVariables } from "@typebot.io/variables/deepParseVariables";
-import type { ChatLog } from "../../../schemas/api";
-import type { SessionState } from "../../../schemas/chatSession";
 import type { ExecuteIntegrationResponse } from "../../../types";
-import { getAuthenticatedGoogleDoc } from "./helpers/getAuthenticatedGoogleDoc";
 import { matchFilter } from "./helpers/matchFilter";
 import { parseNewCellValuesObject } from "./helpers/parseNewCellValuesObject";
 
 export const updateRow = async (
-  state: SessionState,
+  options: GoogleSheetsUpdateRowOptions,
   {
+    state,
     outgoingEdgeId,
-    options,
-  }: { outgoingEdgeId?: string; options: GoogleSheetsUpdateRowOptions },
+    sessionStore,
+  }: {
+    outgoingEdgeId?: string;
+    state: SessionState;
+    sessionStore: SessionStore;
+  },
 ): Promise<ExecuteIntegrationResponse> => {
   const { variables } = state.typebotsQueue[0].typebot;
-  const { sheetId, filter, ...parsedOptions } = deepParseVariables(variables, {
+  const { sheetId, filter, ...parsedOptions } = deepParseVariables(options, {
+    variables,
     removeEmptyStrings: true,
-  })(options);
+    sessionStore,
+  });
+  if (!options.credentialsId || !options.spreadsheetId)
+    return {
+      outgoingEdgeId,
+      logs: [
+        {
+          status: "error",
+          description: "Missing credentialsId or spreadsheetId",
+        },
+      ],
+    };
 
   const referenceCell =
     "referenceCell" in parsedOptions && parsedOptions.referenceCell
@@ -27,36 +46,50 @@ export const updateRow = async (
   if (!options.cellsToUpsert || !sheetId || (!referenceCell && !filter))
     return { outgoingEdgeId };
 
-  const logs: ChatLog[] = [];
+  const logs: LogInSession[] = [];
 
-  const doc = await getAuthenticatedGoogleDoc({
+  const doc = await getGoogleSpreadsheet({
     credentialsId: options.credentialsId,
     spreadsheetId: options.spreadsheetId,
+    workspaceId: state.workspaceId,
   });
 
-  await doc.loadInfo();
-  const sheet = doc.sheetsById[Number(sheetId)];
-  const rows = await sheet.getRows();
-  const filteredRows = rows.filter((row) =>
-    referenceCell
-      ? row.get(referenceCell.column as string) === referenceCell.value
-      : matchFilter(row, filter as NonNullable<typeof filter>),
-  );
-  if (filteredRows.length === 0) {
-    logs.push({
-      status: "info",
-      description: `Could not find any row that matches the filter`,
-      details: filter,
-    });
-    return { outgoingEdgeId, logs };
-  }
-
-  const parsedValues = parseNewCellValuesObject(variables)(
-    options.cellsToUpsert,
-    sheet.headerValues,
-  );
+  if (!doc)
+    return {
+      outgoingEdgeId,
+      logs: [
+        {
+          status: "error",
+          description: "Couldn't find credentials in database",
+          context: "While updating row in spreadsheet",
+        },
+      ],
+    };
 
   try {
+    await doc.loadInfo();
+    const sheet = doc.sheetsById[Number(sheetId)];
+    const rows = await sheet.getRows();
+    const filteredRows = rows.filter((row) =>
+      referenceCell
+        ? row.get(referenceCell.column as string) === referenceCell.value
+        : matchFilter(row, filter as NonNullable<typeof filter>),
+    );
+    if (filteredRows.length === 0) {
+      logs.push({
+        status: "info",
+        description: `Could not find any row that matches the filter`,
+        details: JSON.stringify(filter),
+      });
+      return { outgoingEdgeId, logs };
+    }
+
+    const parsedValues = parseNewCellValuesObject(options.cellsToUpsert, {
+      variables,
+      sessionStore,
+      headerValues: sheet.headerValues,
+    });
+
     for (const filteredRow of filteredRows) {
       const cellsRange = filteredRow.a1Range.split("!").pop();
       await sheet.loadCells(cellsRange);
@@ -76,12 +109,12 @@ export const updateRow = async (
       description: `Succesfully updated matching rows`,
     });
   } catch (err) {
-    console.log(err);
-    logs.push({
-      status: "error",
-      description: `An error occured while updating the row`,
-      details: err,
-    });
+    logs.push(
+      await parseUnknownError({
+        err,
+        context: "While updating row in spreadsheet",
+      }),
+    );
   }
   return { outgoingEdgeId, logs };
 };

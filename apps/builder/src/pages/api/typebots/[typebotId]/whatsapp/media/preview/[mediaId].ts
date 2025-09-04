@@ -44,11 +44,16 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
 
     if (!typebot) return notFound(res, "Typebot not found");
 
-    const mediaId = req.query.mediaId as string;
+    const mediaIdWithExtension = req.query.mediaId as string;
+    const mediaId = mediaIdWithExtension.split(".")[0];
 
     const { file, mimeType } = await downloadMedia({
       mediaId,
-      systemUserAccessToken: env.META_SYSTEM_USER_TOKEN,
+      credentials: {
+        provider: "meta",
+        systemUserAccessToken: env.META_SYSTEM_USER_TOKEN,
+        phoneNumberId: env.WHATSAPP_PREVIEW_FROM_PHONE_NUMBER_ID ?? "",
+      },
     });
 
     res.setHeader("Content-Type", mimeType);

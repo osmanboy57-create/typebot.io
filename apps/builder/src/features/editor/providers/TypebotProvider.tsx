@@ -1,11 +1,14 @@
-import { useGroupsStore } from "@/features/graph/hooks/useGroupsStore";
+import { NotFoundPage } from "@/components/NotFoundPage";
+import { useSelectionStore } from "@/features/graph/hooks/useSelectionStore";
 import { areTypebotsEqual } from "@/features/publish/helpers/areTypebotsEqual";
 import { convertPublicTypebotToTypebot } from "@/features/publish/helpers/convertPublicTypebotToTypebot";
 import { isPublished as isPublishedHelper } from "@/features/publish/helpers/isPublished";
 import { preventUserFromRefreshing } from "@/helpers/preventUserFromRefreshing";
 import { useAutoSave } from "@/hooks/useAutoSave";
-import { useToast } from "@/hooks/useToast";
-import { trpc } from "@/lib/trpc";
+import { trpc } from "@/lib/queryClient";
+import { toast } from "@/lib/toast";
+import { useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { isDefined, omit } from "@typebot.io/lib/utils";
 import type {
   PublicTypebot,
@@ -24,7 +27,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useState,
 } from "react";
 import { useUndo } from "../hooks/useUndo";
 import { type BlocksActions, blocksAction } from "./typebotActions/blocks";
@@ -66,7 +68,6 @@ const typebotContext = createContext<
     publishedTypebot?: PublicTypebotV6;
     publishedTypebotVersion?: PublicTypebot["version"];
     currentUserMode: "guest" | "read" | "write";
-    is404: boolean;
     isPublished: boolean;
     isSavingLoading: boolean;
     save: (updates?: Partial<TypebotV6>, overwrite?: boolean) => Promise<void>;
@@ -97,79 +98,67 @@ export const TypebotProvider = ({
   children: ReactNode;
   typebotId?: string;
 }) => {
-  const { showToast } = useToast();
-  const [is404, setIs404] = useState(false);
-  const setGroupsCoordinates = useGroupsStore(
-    (state) => state.setGroupsCoordinates,
+  const setElementsCoordinates = useSelectionStore(
+    (state) => state.setElementsCoordinates,
   );
 
   const {
     data: typebotData,
     isLoading: isFetchingTypebot,
     refetch: refetchTypebot,
-  } = trpc.typebot.getTypebot.useQuery(
-    { typebotId: typebotId as string, migrateToLatestVersion: true },
-    {
-      enabled: isDefined(typebotId),
-      retry: 0,
-      onError: (error) => {
-        if (error.data?.httpStatus === 404) {
-          setIs404(true);
-          return;
-        }
-        setIs404(false);
-        showToast({
-          title: "Could not fetch typebot",
-          description: error.message,
-          details: {
-            content: JSON.stringify(error.data?.zodError?.fieldErrors, null, 2),
-            lang: "json",
-          },
-        });
+    error: typebotError,
+  } = useQuery(
+    trpc.typebot.getTypebot.queryOptions(
+      { typebotId: typebotId as string, migrateToLatestVersion: true },
+      {
+        enabled: isDefined(typebotId),
+        retry: 0,
       },
-      onSuccess: () => {
-        setIs404(false);
-      },
-    },
+    ),
   );
 
-  const { data: publishedTypebotData } =
-    trpc.typebot.getPublishedTypebot.useQuery(
+  const { data: publishedTypebotData } = useQuery(
+    trpc.typebot.getPublishedTypebot.queryOptions(
       { typebotId: typebotId as string, migrateToLatestVersion: true },
       {
         enabled:
           isDefined(typebotId) &&
           (typebotData?.currentUserMode === "read" ||
             typebotData?.currentUserMode === "write"),
+      },
+    ),
+  );
+
+  const { mutateAsync: updateTypebot, status: updateTypebotStatus } =
+    useMutation(
+      trpc.typebot.updateTypebot.mutationOptions({
         onError: (error) => {
-          showToast({
-            title: "Could not fetch published typebot",
+          if (error.data?.code === "CONFLICT") {
+            toast({
+              title: "Could not update the typebot",
+              description:
+                "We detected that the typebot was updated since you last saved it so we couldn't save your current changes. If it is not expected, we suggest you overwrite the changes.",
+              actionProps: {
+                disabled: updateTypebotStatus === "pending",
+                children: "Overwrite",
+                onClick: async () => {
+                  await saveTypebot(undefined, true);
+                },
+              },
+            });
+            return;
+          }
+          toast({
+            title: "Error while updating typebot",
             description: error.message,
-            details: {
-              content: JSON.stringify(
-                error.data?.zodError?.fieldErrors,
-                null,
-                2,
-              ),
-              lang: "json",
-            },
           });
         },
-      },
+        onSuccess: () => {
+          if (!typebotId) return;
+          refetchTypebot();
+        },
+      }),
     );
-
-  const { mutateAsync: updateTypebot, isLoading: isSaving } =
-    trpc.typebot.updateTypebot.useMutation({
-      onError: (error) =>
-        showToast({
-          title: "Error while updating typebot",
-          description: error.message,
-        }),
-      onSuccess: () => {
-        if (!typebotId) return;
-        refetchTypebot();
-      },
-    });
 
   const typebot = typebotData?.typebot as TypebotV6;
   const publishedTypebot = (publishedTypebotData?.publishedTypebot ??
@@ -192,17 +181,23 @@ export const TypebotProvider = ({
   ] = useUndo<TypebotV6>(undefined, {
     isReadOnly,
     onUndo: (t) => {
-      setGroupsCoordinates(t.groups);
+      setElementsCoordinates({
+        groups: t.groups,
+        events: t.events,
+      });
     },
     onRedo: (t) => {
-      setGroupsCoordinates(t.groups);
+      setElementsCoordinates({
+        groups: t.groups,
+        events: t.events,
+      });
     },
   });
 
   useEffect(() => {
     if (!typebot && isDefined(localTypebot)) {
       setLocalTypebot(undefined);
-      setGroupsCoordinates(undefined);
+      setElementsCoordinates(undefined);
     }
     if (isFetchingTypebot || !typebot) return;
     if (
@@ -211,16 +206,18 @@ export const TypebotProvider = ({
         new Date(localTypebot.updatedAt).getTime()
     ) {
       setLocalTypebot({ ...typebot });
-      setGroupsCoordinates(typebot.groups);
+      setElementsCoordinates({
+        groups: typebot.groups,
+        events: typebot.events,
+      });
       flush();
     }
   }, [
     flush,
     isFetchingTypebot,
     localTypebot,
-    setGroupsCoordinates,
+    setElementsCoordinates,
     setLocalTypebot,
-    showToast,
     typebot,
   ]);
 
@@ -244,6 +241,7 @@ export const TypebotProvider = ({
         const { typebot } = await updateTypebot({
           typebotId: newParsedTypebot.id,
           typebot: newParsedTypebot,
+          overwrite,
         });
         setUpdateDate(typebot.updatedAt);
         if (overwrite) {
@@ -327,6 +325,8 @@ export const TypebotProvider = ({
     );
   };
 
+  if (typebotError?.data?.httpStatus === 404)
+    return <NotFoundPage resourceName="Typebot" />;
   return (
     <typebotContext.Provider
       value={{
@@ -334,8 +334,7 @@ export const TypebotProvider = ({
         publishedTypebot,
         publishedTypebotVersion: publishedTypebotData?.version,
         currentUserMode: typebotData?.currentUserMode ?? "guest",
-        isSavingLoading: isSaving,
-        is404,
+        isSavingLoading: updateTypebotStatus === "pending",
         save: saveTypebot,
         undo,
         redo,

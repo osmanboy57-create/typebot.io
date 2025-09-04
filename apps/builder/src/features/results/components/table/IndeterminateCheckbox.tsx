@@ -1,14 +1,17 @@
-import { Checkbox, Flex } from "@chakra-ui/react";
+import { Checkbox, type CheckboxProps, Flex } from "@chakra-ui/react";
 import React from "react";
 
+type TableCheckBoxProps = {
+  indeterminate: boolean;
+  checked: boolean;
+} & Omit<CheckboxProps, "ref" | "isIndeterminate" | "isChecked">;
+
 const TableCheckBox = (
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  { indeterminate, checked, ...rest }: any,
+  { indeterminate, checked, ...rest }: TableCheckBoxProps,
   ref: React.LegacyRef<HTMLInputElement>,
 ) => {
   const defaultRef = React.useRef();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const resolvedRef: any = ref || defaultRef;
+  const resolvedRef = ref || defaultRef;
 
   return (
     <Flex justify="center" data-testid="checkbox">

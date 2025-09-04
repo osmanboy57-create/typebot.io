@@ -1,3 +1,5 @@
+import type { SessionStore } from "@typebot.io/runtime-session-store";
+import type { WithoutVariables } from "@typebot.io/variables/types";
 import type { z } from "@typebot.io/zod";
 import type { SVGProps } from "react";
 
@@ -21,15 +23,16 @@ export type LogsStore = {
     log:
       | string
       | {
-          status: "error" | "success" | "info";
+          status?: "error" | "success" | "info";
           description: string;
-          details?: unknown;
+          details?: string;
+          context?: string;
         },
   ) => void;
 };
 
 export type FunctionToExecute = {
-  args: Record<string, string | number | null>;
+  args: Record<string, string | number | object | null>;
   content: string;
 };
 
@@ -42,34 +45,63 @@ export type TurnableIntoParam<T = {}> = {
 };
 
 export type ActionDefinition<
-  A extends AuthDefinition,
+  A extends AuthDefinition<any>,
   BaseOptions extends z.ZodObject<z.ZodRawShape> = z.ZodObject<{}>,
   Options extends z.ZodObject<z.ZodRawShape> = z.ZodObject<{}>,
 > = {
   name: string;
+  parseBlockNodeLabel?: (
+    options: WithoutVariables<z.infer<BaseOptions> & z.infer<Options>>,
+  ) => string;
   fetchers?: FetcherDefinition<A, z.infer<BaseOptions> & z.infer<Options>>[];
   options?: Options;
   turnableInto?: TurnableIntoParam<z.infer<Options>>[];
   getSetVariableIds?: (options: z.infer<Options>) => string[];
+  /**
+   * Used for AI generation in the builder if enabled by the user.
+   */
+  aiGenerate?: {
+    models:
+      | {
+          type: "static";
+          items: string[];
+        }
+      | {
+          type: "dynamic";
+          fetcherId: string;
+        };
+    getModel: (params: {
+      credentials: CredentialsFromAuthDef<A>;
+      model: string;
+    }) => any;
+  };
   run?: {
     server?: (params: {
       credentials: CredentialsFromAuthDef<A>;
-      options: z.infer<BaseOptions> & z.infer<Options>;
+      options: WithoutVariables<z.infer<BaseOptions> & z.infer<Options>>;
       variables: VariableStore;
       logs: LogsStore;
+      sessionStore: SessionStore;
     }) => Promise<void> | void;
     /**
      * Used to stream a text bubble. Will only be used if the block following the integration block is a text bubble containing the variable returned by `getStreamVariableId`.
      */
     stream?: {
-      getStreamVariableId: (options: z.infer<Options>) => string | undefined;
+      getStreamVariableId: (
+        options: WithoutVariables<z.infer<BaseOptions> & z.infer<Options>>,
+      ) => string | undefined;
       run: (params: {
         credentials: CredentialsFromAuthDef<A>;
-        options: z.infer<BaseOptions> & z.infer<Options>;
+        options: WithoutVariables<z.infer<BaseOptions> & z.infer<Options>>;
         variables: AsyncVariableStore;
+        sessionStore: SessionStore;
       }) => Promise<{
         stream?: ReadableStream<any>;
-        httpError?: { status: number; message: string };
+        error?: {
+          description: string;
+          details?: string;
+          context?: string;
+        };
       }>;
     };
     web?: {
@@ -79,31 +111,31 @@ export type ActionDefinition<
          */
         parseUrl: (params: {
           credentials: CredentialsFromAuthDef<A>;
-          options: z.infer<BaseOptions> & z.infer<Options>;
+          options: WithoutVariables<z.infer<BaseOptions> & z.infer<Options>>;
           variables: VariableStore;
           logs: LogsStore;
         }) => string | undefined;
         waitForEvent?: {
           getSaveVariableId?: (
-            options: z.infer<BaseOptions> & z.infer<Options>,
+            options: WithoutVariables<z.infer<BaseOptions> & z.infer<Options>>,
           ) => string | undefined;
           parseFunction: (params: {
             credentials: CredentialsFromAuthDef<A>;
-            options: z.infer<BaseOptions> & z.infer<Options>;
+            options: WithoutVariables<z.infer<BaseOptions> & z.infer<Options>>;
             variables: VariableStore;
             logs: LogsStore;
           }) => FunctionToExecute;
         };
         parseInitFunction: (params: {
           credentials: CredentialsFromAuthDef<A>;
-          options: z.infer<BaseOptions> & z.infer<Options>;
+          options: WithoutVariables<z.infer<BaseOptions> & z.infer<Options>>;
           variables: VariableStore;
           logs: LogsStore;
         }) => FunctionToExecute;
       };
       parseFunction?: (params: {
         credentials: CredentialsFromAuthDef<A>;
-        options: z.infer<BaseOptions> & z.infer<Options>;
+        options: WithoutVariables<z.infer<BaseOptions> & z.infer<Options>>;
         variables: VariableStore;
         logs: LogsStore;
       }) => FunctionToExecute;
@@ -111,7 +143,25 @@ export type ActionDefinition<
   };
 };
 
-export type FetcherDefinition<A extends AuthDefinition, T = {}> = {
+type BackendFuncReturnType<T> = {
+  data?: T;
+  error?: {
+    /**
+     * Context of the error. i.e. "Fetching models", "Creating chat completion"
+     */
+    context?: string;
+    /**
+     * Description of the error. i.e. "No API key provided", "No model provided"
+     */
+    description: string;
+    /**
+     * Details of the error, is often a JSON stringified object.
+     */
+    details?: string;
+  };
+};
+
+export type FetcherDefinition<A extends AuthDefinition<any>, T = {}> = {
   id: string;
   /**
    * List of option keys to determine if the fetcher should be re-executed whenever these options are updated.
@@ -120,25 +170,53 @@ export type FetcherDefinition<A extends AuthDefinition, T = {}> = {
   fetch: (params: {
     credentials: CredentialsFromAuthDef<A> | undefined;
     options: T;
-  }) => Promise<(string | { label: string; value: string })[]>;
+  }) => Promise<
+    BackendFuncReturnType<(string | { label: string; value: string })[]>
+  >;
 };
 
-export type AuthDefinition = {
-  type: "encryptedCredentials";
+export type OAuthDefinition = {
+  type: "oauth";
   name: string;
-  schema: z.ZodObject<any>;
+  defaultClient?: {
+    id: string;
+    secret: string;
+  };
+  authUrl: string;
+  tokenUrl: string;
+  scopes: readonly string[];
+  extraAuthParams?: Record<string, string>;
+  defaultClientEnvKeys?: {
+    id: string;
+    secret: string;
+  };
 };
 
-export type CredentialsFromAuthDef<A extends AuthDefinition> = A extends {
-  type: "encryptedCredentials";
+export type AuthDefinition<T extends z.ZodObject<z.ZodRawShape>> =
+  | {
+      type: "encryptedCredentials";
+      name: string;
+      schema: T;
+    }
+  | OAuthDefinition;
+
+export type CredentialsFromAuthDef<A extends AuthDefinition<any>> = A extends {
   schema: infer S extends z.ZodObject<any>;
 }
   ? z.infer<S>
-  : never;
+  : {
+      client: {
+        id: string;
+        secret: string;
+      };
+      accessToken: string;
+      refreshToken: string;
+      expiryDate: number;
+    };
 
 export type BlockDefinition<
   Id extends string,
-  Auth extends AuthDefinition,
+  Auth extends AuthDefinition<any>,
   Options extends z.ZodObject<any>,
 > = {
   id: Id;
@@ -155,6 +233,7 @@ export type BlockDefinition<
     deployedAt: Date;
     youtubeId: string;
   };
+  badge?: "beta";
   auth?: Auth;
   options?: Options | undefined;
   fetchers?: FetcherDefinition<Auth, Options>[];

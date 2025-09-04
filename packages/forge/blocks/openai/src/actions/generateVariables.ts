@@ -1,29 +1,27 @@
 import { createOpenAI } from "@ai-sdk/openai";
+import { parseGenerateVariablesOptions } from "@typebot.io/ai/parseGenerateVariablesOptions";
+import { runGenerateVariables } from "@typebot.io/ai/runGenerateVariables";
 import { createAction } from "@typebot.io/forge";
 import { isDefined } from "@typebot.io/lib/utils";
 import { auth } from "../auth";
 import { baseOptions } from "../baseOptions";
-import { fetchGPTModels } from "../helpers/fetchModels";
-import { parseGenerateVariablesOptions } from "../shared/parseGenerateVariablesOptions";
-import { runGenerateVariables } from "../shared/runGenerateVariables";
+import { chatModels, reasoningModels } from "../constants";
 
 export const generateVariables = createAction({
   name: "Generate variables",
   auth,
   baseOptions,
-  options: parseGenerateVariablesOptions({ modelFetch: "fetchModels" }),
-  fetchers: [
-    {
-      id: "fetchModels",
-      dependencies: ["baseUrl", "apiVersion"],
-      fetch: ({ credentials, options }) =>
-        fetchGPTModels({
-          apiKey: credentials?.apiKey,
-          baseUrl: options.baseUrl,
-          apiVersion: options.apiVersion,
-        }),
-    },
-  ],
+  options: parseGenerateVariablesOptions({
+    models: { type: "static", models: chatModels.concat(reasoningModels) },
+  }),
+  aiGenerate: {
+    models: { type: "static", items: chatModels.concat(reasoningModels) },
+    getModel: ({ credentials, model }) =>
+      createOpenAI({
+        apiKey: credentials.apiKey,
+        compatibility: "strict",
+      })(model),
+  },
   turnableInto: [
     {
       blockId: "mistral",

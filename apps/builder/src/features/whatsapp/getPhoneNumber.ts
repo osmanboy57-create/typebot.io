@@ -1,11 +1,13 @@
 import { authenticatedProcedure } from "@/helpers/server/trpc";
+import { ClientToastError } from "@/lib/ClientToastError";
 import { TRPCError } from "@trpc/server";
+import { decrypt } from "@typebot.io/credentials/decrypt";
+import type { WhatsAppCredentials } from "@typebot.io/credentials/schemas";
 import { env } from "@typebot.io/env";
-import { decrypt } from "@typebot.io/lib/api/encryption/decrypt";
 import prisma from "@typebot.io/prisma";
-import type { WhatsAppCredentials } from "@typebot.io/whatsapp/schemas";
 import { z } from "@typebot.io/zod";
 import ky from "ky";
+import { formatPhoneNumberDisplayName } from "./formatPhoneNumberDisplayName";
 
 const inputSchema = z.object({
   credentialsId: z.string().optional(),
@@ -22,30 +24,45 @@ export const getPhoneNumber = authenticatedProcedure
         code: "NOT_FOUND",
         message: "Credentials not found",
       });
-    const { display_phone_number } = await ky
-      .get(`${env.WHATSAPP_CLOUD_API_URL}/v17.0/${credentials.phoneNumberId}`, {
-        headers: {
-          Authorization: `Bearer ${credentials.systemUserAccessToken}`,
-        },
-      })
-      .json<{ display_phone_number: string }>();
 
-    const formattedPhoneNumber = `${
-      display_phone_number.startsWith("+") ? "" : "+"
-    }${display_phone_number.replace(/[\s-]/g, "")}`;
+    if (credentials.type === "360dialog")
+      return {
+        name: credentials.phoneNumber,
+      };
+    try {
+      const { display_phone_number } = await ky
+        .get(
+          `${env.WHATSAPP_CLOUD_API_URL}/v17.0/${credentials.phoneNumberId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${credentials.systemUserAccessToken}`,
+            },
+          },
+        )
+        .json<{ display_phone_number: string }>();
 
-    return {
-      id: credentials.phoneNumberId,
-      name: formattedPhoneNumber,
-    };
+      const formattedPhoneNumber =
+        formatPhoneNumberDisplayName(display_phone_number);
+
+      return {
+        name: formattedPhoneNumber,
+      };
+    } catch (err) {
+      throw await ClientToastError.fromUnkownError(err);
+    }
   });
 
 const getCredentials = async (
   userId: string,
   input: z.infer<typeof inputSchema>,
-): Promise<WhatsAppCredentials["data"] | undefined> => {
+): Promise<
+  | { type: "meta"; systemUserAccessToken: string; phoneNumberId: string }
+  | { type: "360dialog"; phoneNumber: string }
+  | undefined
+> => {
   if (input.systemToken && input.phoneNumberId)
     return {
+      type: "meta",
       systemUserAccessToken: input.systemToken,
       phoneNumberId: input.phoneNumberId,
     };
@@ -57,8 +74,23 @@ const getCredentials = async (
     },
   });
   if (!credentials) return;
-  return (await decrypt(
+  const decryptedData = (await decrypt(
     credentials.data,
     credentials.iv,
   )) as WhatsAppCredentials["data"];
+
+  if (decryptedData.provider === "meta") {
+    return {
+      type: "meta",
+      systemUserAccessToken: decryptedData.systemUserAccessToken,
+      phoneNumberId: decryptedData.phoneNumberId,
+    };
+  }
+
+  if (decryptedData.provider === "360dialog") {
+    return {
+      type: "360dialog",
+      phoneNumber: credentials.name,
+    };
+  }
 };

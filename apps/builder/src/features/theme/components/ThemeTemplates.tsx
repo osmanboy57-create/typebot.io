@@ -1,6 +1,8 @@
-import { Button, HStack, Stack } from "@chakra-ui/react";
+import { HStack, Stack } from "@chakra-ui/react";
 import { useTranslate } from "@tolgee/react";
 import type { ThemeTemplate } from "@typebot.io/theme/schemas";
+import type { TypebotV6 } from "@typebot.io/typebot/schemas/typebot";
+import { Button } from "@typebot.io/ui/components/Button";
 import { useState } from "react";
 import { MyTemplates } from "./MyTemplates";
 import { TemplatesGallery } from "./TemplatesGallery";
@@ -10,6 +12,7 @@ type Tab = "my-templates" | "gallery";
 type Props = {
   workspaceId: string;
   selectedTemplateId: string | undefined;
+  typebotVersion: TypebotV6["version"];
   currentTheme: ThemeTemplate["theme"];
   onTemplateSelect: (
     template: Partial<Pick<ThemeTemplate, "id" | "theme">>,
@@ -18,6 +21,7 @@ type Props = {
 
 export const ThemeTemplates = ({
   workspaceId,
+  typebotVersion,
   selectedTemplateId,
   currentTheme,
   onTemplateSelect,
@@ -30,17 +34,13 @@ export const ThemeTemplates = ({
     <Stack spacing={4}>
       <HStack>
         <Button
-          flex="1"
-          variant="outline"
-          colorScheme={selectedTab === "my-templates" ? "blue" : "gray"}
+          variant={selectedTab === "my-templates" ? "outline" : "ghost"}
           onClick={() => setSelectedTab("my-templates")}
         >
           {t("theme.sideMenu.template.myTemplates")}
         </Button>
         <Button
-          flex="1"
-          variant="outline"
-          colorScheme={selectedTab === "gallery" ? "blue" : "gray"}
+          variant={selectedTab === "gallery" ? "outline" : "ghost"}
           onClick={() => setSelectedTab("gallery")}
         >
           {t("theme.sideMenu.template.gallery")}
@@ -50,6 +50,7 @@ export const ThemeTemplates = ({
         tab={selectedTab}
         currentTheme={currentTheme}
         workspaceId={workspaceId}
+        typebotVersion={typebotVersion}
         selectedTemplateId={selectedTemplateId}
         onTemplateSelect={onTemplateSelect}
       />
@@ -61,6 +62,7 @@ const ThemeTemplatesBody = ({
   tab,
   workspaceId,
   selectedTemplateId,
+  typebotVersion,
   currentTheme,
   onTemplateSelect,
 }: {
@@ -72,6 +74,7 @@ const ThemeTemplatesBody = ({
         <MyTemplates
           onTemplateSelect={onTemplateSelect}
           currentTheme={currentTheme}
+          typebotVersion={typebotVersion}
           selectedTemplateId={selectedTemplateId}
           workspaceId={workspaceId}
         />
@@ -81,6 +84,7 @@ const ThemeTemplatesBody = ({
         <TemplatesGallery
           onTemplateSelect={onTemplateSelect}
           currentTheme={currentTheme}
+          typebotVersion={typebotVersion}
           selectedTemplateId={selectedTemplateId}
           workspaceId={workspaceId}
         />

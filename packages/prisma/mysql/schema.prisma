@@ -62,6 +62,10 @@ model User {
   sessions                    Session[]
   bannedIps                   BannedIp[]
   displayedInAppNotifications Json?
+  credentials                 UserCredentials[]
+  groupTitlesAutoGeneration   Json?
+  preferredLanguage           String?                   @db.VarChar(10)
+  termsAcceptedAt             DateTime?
 }
 
 model ApiToken {
@@ -104,6 +108,12 @@ model Workspace {
   isPastDue                     Boolean               @default(false)
   isVerified                    Boolean?
   themeTemplates                ThemeTemplate[]
+  chatsHardLimit                Int?
+  // TODO: remove
+  settings                      Json?
+  lastActivityAt                DateTime?
+  inactiveFirstEmailSentAt      DateTime?
+  inactiveSecondEmailSentAt     DateTime?
 }
 
 model MemberInWorkspace {
@@ -153,9 +163,23 @@ model Credentials {
   @@index([workspaceId])
 }
 
+model UserCredentials {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  userId    String
+  data      String   @db.Text
+  name      String
+  type      String
+  iv        String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
 model VerificationToken {
   identifier String
   token      String   @unique
+  value      String?  @db.Text
   expires    DateTime
 
   @@unique([identifier, token])
@@ -240,18 +264,36 @@ model CollaboratorsOnTypebots {
 }
 
 model PublicTypebot {
-  id        String   @id @default(cuid())
-  version   String?  @db.VarChar(10)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
-  typebotId String   @unique
-  groups    Json
-  events    Json?
-  variables Json
-  edges     Json
-  theme     Json
-  settings  Json
-  typebot   Typebot  @relation(fields: [typebotId], references: [id], onDelete: Cascade)
+  id            String                @id @default(cuid())
+  version       String?               @db.VarChar(10)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @default(now()) @updatedAt
+  typebotId     String                @unique
+  groups        Json
+  events        Json?
+  variables     Json
+  edges         Json
+  theme         Json
+  settings      Json
+  typebot       Typebot               @relation(fields: [typebotId], references: [id], onDelete: Cascade)
+  mediaIdsCache RuntimeMediaIdCache[]
+}
+
+model RuntimeMediaIdCache {
+  provider        ChatProvider
+  url             String         @db.VarChar(512)
+  mediaId         String
+  expiresAt       DateTime?
+  publicTypebot   PublicTypebot? @relation(fields: [publicTypebotId], references: [id], onDelete: Cascade)
+  publicTypebotId String
+
+  @@unique([publicTypebotId, provider, url])
+  @@index([expiresAt])
+}
+
+enum ChatProvider {
+  WHATSAPP
+  DIALOG360
 }
 
 model Result {
@@ -300,6 +342,7 @@ model Log {
   resultId    String
   status      String
   description String   @db.Text
+  context     String?  @db.Text
   details     String?  @db.Text
   result      Result   @relation(fields: [resultId], references: [id], onDelete: Cascade)
 
@@ -424,6 +467,7 @@ enum Plan {
   OFFERED
   CUSTOM
   UNLIMITED
+  ENTERPRISE
 }
 
 enum CollaborationType {

@@ -5,18 +5,22 @@ import { en as chronoParser } from "chrono-node";
 import { format } from "date-fns";
 import type { ParsedReply } from "../../../types";
 
+const formatOptions = {
+  useAdditionalDayOfYearTokens: true,
+  useAdditionalWeekYearTokens: true,
+};
 export const parseDateReply = (
   reply: string,
   block: DateInputBlock,
 ): ParsedReply => {
   const parsedDate = (
-    block.options?.format ?? defaultDateInputOptions.format
+    block.options?.format || defaultDateInputOptions.format
   ).startsWith("dd")
     ? chronoParser.GB.parse(reply)
     : chronoParser.parse(reply);
   if (parsedDate.length === 0) return { status: "fail" };
   const formatString =
-    block.options?.format ??
+    block.options?.format ||
     (block.options?.hasTime
       ? defaultDateInputOptions.formatWithTime
       : defaultDateInputOptions.format);
@@ -24,13 +28,13 @@ export const parseDateReply = (
   const detectedStartDate = parseDateWithNeutralTimezone(
     parsedDate[0].start.date(),
   );
-  const startDate = format(detectedStartDate, formatString);
+  const startDate = format(detectedStartDate, formatString, formatOptions);
 
   const detectedEndDate = parsedDate[0].end?.date()
     ? parseDateWithNeutralTimezone(parsedDate[0].end?.date())
     : undefined;
   const endDate = detectedEndDate
-    ? format(detectedEndDate, formatString)
+    ? format(detectedEndDate, formatString, formatOptions)
     : undefined;
 
   if (block.options?.isRange && !endDate) return { status: "fail" };
@@ -53,7 +57,7 @@ export const parseDateReply = (
 
   return {
     status: "success",
-    reply: block.options?.isRange ? `${startDate} to ${endDate}` : startDate,
+    content: block.options?.isRange ? `${startDate} to ${endDate}` : startDate,
   };
 };
 

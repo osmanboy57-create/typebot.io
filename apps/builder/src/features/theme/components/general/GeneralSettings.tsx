@@ -1,10 +1,10 @@
 import { RadioButtons } from "@/components/inputs/RadioButtons";
-import { ChangePlanModal } from "@/features/billing/components/ChangePlanModal";
+import { ChangePlanDialog } from "@/features/billing/components/ChangePlanDialog";
 import { LockTag } from "@/features/billing/components/LockTag";
 import { isFreePlan } from "@/features/billing/helpers/isFreePlan";
 import { useTypebot } from "@/features/editor/providers/TypebotProvider";
 import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
-import { trpc } from "@/lib/trpc";
+import { trpc } from "@/lib/queryClient";
 import {
   Accordion,
   AccordionButton,
@@ -17,6 +17,7 @@ import {
   Switch,
   useDisclosure,
 } from "@chakra-ui/react";
+import { useMutation } from "@tanstack/react-query";
 import { useTranslate } from "@tolgee/react";
 import { env } from "@typebot.io/env";
 import { Plan } from "@typebot.io/prisma/enum";
@@ -51,8 +52,9 @@ export const GeneralSettings = ({
   const { typebot } = useTypebot();
   const isWorkspaceFreePlan = isFreePlan(workspace);
 
-  const { mutate: trackClientEvents } =
-    trpc.telemetry.trackClientEvents.useMutation();
+  const { mutate: trackClientEvents } = useMutation(
+    trpc.telemetry.trackClientEvents.mutationOptions(),
+  );
 
   const updateFont = (font: Font) =>
     onGeneralThemeChange({ ...generalTheme, font });
@@ -101,7 +103,7 @@ export const GeneralSettings = ({
 
   return (
     <Stack spacing={6}>
-      <ChangePlanModal
+      <ChangePlanDialog
         isOpen={isOpen}
         onClose={onClose}
         type={t("billing.limitMessage.brand")}
@@ -128,10 +130,13 @@ export const GeneralSettings = ({
             <AccordionIcon />
           </AccordionButton>
           <AccordionPanel>
-            <ProgressBarForm
-              progressBar={generalTheme?.progressBar}
-              onProgressBarChange={updateProgressBar}
-            />
+            {typebot && (
+              <ProgressBarForm
+                progressBar={generalTheme?.progressBar}
+                onProgressBarChange={updateProgressBar}
+                typebotVersion={typebot.version}
+              />
+            )}
           </AccordionPanel>
         </AccordionItem>
         <AccordionItem>

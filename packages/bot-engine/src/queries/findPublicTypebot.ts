@@ -8,6 +8,7 @@ export const findPublicTypebot = ({ publicId }: Props) =>
   prisma.publicTypebot.findFirst({
     where: { typebot: { publicId } },
     select: {
+      id: true,
       version: true,
       groups: true,
       events: true,
@@ -18,6 +19,7 @@ export const findPublicTypebot = ({ publicId }: Props) =>
       typebotId: true,
       typebot: {
         select: {
+          workspaceId: true,
           isArchived: true,
           isClosed: true,
           workspace: {

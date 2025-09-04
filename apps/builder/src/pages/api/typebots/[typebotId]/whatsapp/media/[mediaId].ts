@@ -1,6 +1,7 @@
 import { getAuthenticatedUser } from "@/features/auth/helpers/getAuthenticatedUser";
 import { isReadWorkspaceFobidden } from "@/features/workspace/helpers/isReadWorkspaceFobidden";
-import { decrypt } from "@typebot.io/lib/api/encryption/decrypt";
+import { decrypt } from "@typebot.io/credentials/decrypt";
+import type { WhatsAppCredentials } from "@typebot.io/credentials/schemas";
 import {
   methodNotAllowed,
   notAuthenticated,
@@ -8,7 +9,6 @@ import {
 } from "@typebot.io/lib/api/utils";
 import prisma from "@typebot.io/prisma";
 import { downloadMedia } from "@typebot.io/whatsapp/downloadMedia";
-import type { WhatsAppCredentials } from "@typebot.io/whatsapp/schemas";
 import type { NextApiRequest, NextApiResponse } from "next";
 
 const handler = async (req: NextApiRequest, res: NextApiResponse) => {
@@ -46,7 +46,8 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
 
     if (!typebot) return notFound(res, "Typebot not found");
 
-    const mediaId = req.query.mediaId as string;
+    const mediaIdWithExtension = req.query.mediaId as string;
+    const mediaId = mediaIdWithExtension.split(".")[0];
     const credentialsId = typebot.whatsAppCredentialsId;
 
     const credentials = typebot.workspace.credentials.find(
@@ -62,7 +63,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
 
     const { file, mimeType } = await downloadMedia({
       mediaId,
-      systemUserAccessToken: credentialsData.systemUserAccessToken,
+      credentials: credentialsData,
     });
 
     res.setHeader("Content-Type", mimeType);

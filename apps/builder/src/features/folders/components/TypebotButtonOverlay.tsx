@@ -4,10 +4,10 @@ import {
   Box,
   type BoxProps,
   Flex,
-  Text,
   VStack,
   useColorModeValue,
 } from "@chakra-ui/react";
+import { LayoutBottomIcon } from "@typebot.io/ui/icons/LayoutBottomIcon";
 
 type Props = {
   typebot: TypebotInDashboard;
@@ -28,7 +28,7 @@ export const TypebotCardOverlay = ({ typebot, ...props }: Props) => {
       borderWidth={1}
       rounded="md"
       bgColor={useColorModeValue("white", "gray.700")}
-      shadow="lg"
+      shadow="md"
       opacity={0.7}
       {...props}
     >
@@ -39,9 +39,13 @@ export const TypebotCardOverlay = ({ typebot, ...props }: Props) => {
           alignItems="center"
           fontSize={"4xl"}
         >
-          <EmojiOrImageIcon icon={typebot.icon} boxSize={"35px"} />
+          <EmojiOrImageIcon
+            icon={typebot.icon}
+            size="lg"
+            defaultIcon={LayoutBottomIcon}
+          />
         </Flex>
-        <Text>{typebot.name}</Text>
+        <p className="font-medium">{typebot.name}</p>
       </VStack>
     </Box>
   );

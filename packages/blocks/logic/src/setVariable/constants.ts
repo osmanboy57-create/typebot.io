@@ -5,6 +5,7 @@ export const valueTypes = [
   "Empty",
   "Append value(s)",
   "Environment name",
+  "Device type",
   "Transcript",
   "User ID",
   "Result ID",
@@ -19,7 +20,25 @@ export const valueTypes = [
   "Shift",
   "Phone number",
   "Contact name",
+  "Referral Click ID",
+  "Referral Source ID",
 ] as const;
+
+export const valueTypesWithNoOptions = [
+  "Today",
+  "Moment of the day",
+  "Empty",
+  "Environment name",
+  "User ID",
+  "Result ID",
+  "Random ID",
+  "Phone number",
+  "Contact name",
+  "Transcript",
+  "Referral Click ID",
+  "Referral Source ID",
+  "Device type",
+] as const satisfies (typeof valueTypes)[number][];
 
 export const hiddenTypes = ["Today", "User ID"] as const;
 
@@ -30,3 +49,10 @@ export const defaultSetVariableOptions = {
   isExecutedOnClient: false,
   isCode: false,
 } as const satisfies SetVariableBlock["options"];
+
+export const whatsAppSetVariableTypes = [
+  "Phone number",
+  "Contact name",
+  "Referral Click ID",
+  "Referral Source ID",
+] as const satisfies (typeof valueTypes)[number][];

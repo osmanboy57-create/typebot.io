@@ -30,5 +30,20 @@
     "quickfix.biome": "explicit",
     "source.organizeImports.biome": "explicit"
   },
-  "eslint.enable": false
+  "eslint.enable": false,
+  "npm.packageManager": "bun",
+  "i18n-ally.localesPaths": ["apps/builder/src/i18n"],
+  "i18n-ally.keystyle": "flat",
+  "i18n-ally.displayLanguage": "en",
+  "i18n-ally.sortKeys": true,
+  "i18n-ally.enabledFrameworks": ["custom"],
+  "search.exclude": {
+    "**/deprecated/**": true
+  },
+  "vitest.nodeEnv": {
+    "DATABASE_URL": "postgresql://postgres:typebot@127.0.0.1:5432/typebot",
+    "ENCRYPTION_SECRET": "dummy_XMHwTK1T5q3XZCgJIeWGCN3T3I",
+    "NEXTAUTH_URL": "http://localhost:3000",
+    "NEXT_PUBLIC_VIEWER_URL": "http://localhost:3001"
+  }
 }

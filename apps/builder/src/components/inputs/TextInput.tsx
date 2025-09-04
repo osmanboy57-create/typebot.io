@@ -48,6 +48,8 @@ export type TextInputProps = {
   | "size"
   | "maxWidth"
   | "flexShrink"
+  | "onKeyDown"
+  | "className"
 >;
 
 export const TextInput = forwardRef(function TextInput(
@@ -56,6 +58,7 @@ export const TextInput = forwardRef(function TextInput(
     defaultValue,
     debounceTimeout = 1000,
     label,
+    className,
     helperText,
     moreInfoTooltip,
     withVariableButton = true,
@@ -73,6 +76,7 @@ export const TextInput = forwardRef(function TextInput(
     direction = "column",
     width,
     flexShrink,
+    onKeyDown,
   }: TextInputProps,
   ref,
 ) {
@@ -136,6 +140,7 @@ export const TextInput = forwardRef(function TextInput(
       autoFocus={autoFocus}
       onFocus={onFocus}
       onKeyUp={onKeyUp}
+      onKeyDown={onKeyDown}
       onBlur={updateCarretPosition}
       onChange={(e) => changeValue(e.target.value)}
       size={size}
@@ -151,6 +156,7 @@ export const TextInput = forwardRef(function TextInput(
       width={label || width === "full" ? "full" : "auto"}
       spacing={direction === "column" ? 2 : 3}
       flexShrink={flexShrink}
+      className={className}
     >
       {label && (
         <FormLabel display="flex" flexShrink={0} gap="1" mb="0" mr="0">

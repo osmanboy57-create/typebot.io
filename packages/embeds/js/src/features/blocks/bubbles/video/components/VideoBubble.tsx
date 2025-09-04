@@ -1,16 +1,16 @@
 import { TypingBubble } from "@/components/TypingBubble";
-import { isMobile } from "@/utils/isMobileSignal";
 import {
   VideoBubbleContentType,
   defaultVideoBubbleContent,
   embedBaseUrls,
   embeddableVideoTypes,
 } from "@typebot.io/blocks-bubbles/video/constants";
+import { parseQueryParams } from "@typebot.io/blocks-bubbles/video/helpers";
 import type {
   EmbeddableVideoBubbleContentType,
   VideoBubbleBlock,
 } from "@typebot.io/blocks-bubbles/video/schema";
-import { clsx } from "clsx";
+import { cx } from "@typebot.io/ui/lib/cva";
 import { Match, Switch, createSignal, onCleanup, onMount } from "solid-js";
 
 type Props = {
@@ -50,7 +50,7 @@ export const VideoBubble = (props: Props) => {
 
   return (
     <div
-      class={clsx(
+      class={cx(
         "flex flex-col w-full",
         props.onTransitionEnd ? "animate-fade-in" : undefined,
       )}
@@ -88,12 +88,11 @@ export const VideoBubble = (props: Props) => {
                   props.content?.areControlsDisplayed ??
                   defaultVideoBubbleContent.areControlsDisplayed
                 }
-                class={
-                  "p-4 focus:outline-none w-full z-10 text-fade-in rounded-md " +
-                  (isTyping() ? "opacity-0" : "opacity-100")
-                }
+                class={cx(
+                  "p-4 focus:outline-none w-full z-10 text-fade-in rounded-md",
+                  isTyping() ? "opacity-0 h-8 @xs:h-9" : "opacity-100 h-auto",
+                )}
                 style={{
-                  height: isTyping() ? (isMobile() ? "32px" : "36px") : "auto",
                   "aspect-ratio": props.content?.aspectRatio,
                   "max-width":
                     props.content?.maxWidth ??
@@ -110,22 +109,16 @@ export const VideoBubble = (props: Props) => {
               }
             >
               <div
-                class={clsx(
-                  "p-4 z-10 text-fade-in w-full",
-                  isTyping() ? "opacity-0" : "opacity-100 p-4",
+                class={cx(
+                  "p-4 z-10 text-fade-in w-full aspect-[var(--aspect-ratio)]",
+                  isTyping() ? "opacity-0 h-8 @xs:h-9" : "opacity-100",
+                  !props.content?.aspectRatio && "h-[var(--height)]",
                 )}
                 style={{
-                  height: isTyping()
-                    ? isMobile()
-                      ? "32px"
-                      : "36px"
-                    : !props.content?.aspectRatio
-                      ? `${
-                          props.content?.height ??
-                          defaultVideoBubbleContent.height
-                        }px`
-                      : undefined,
-                  "aspect-ratio": props.content?.aspectRatio,
+                  "--aspect-ratio": props.content?.aspectRatio,
+                  "--height": `${
+                    props.content?.height ?? defaultVideoBubbleContent.height
+                  }px`,
                   "max-width":
                     props.content?.maxWidth ??
                     defaultVideoBubbleContent.maxWidth,
@@ -137,7 +130,8 @@ export const VideoBubble = (props: Props) => {
                       props.content?.type as EmbeddableVideoBubbleContentType
                     ]
                   }/${props.content?.id ?? ""}${
-                    props.content?.queryParamsStr ?? ""
+                    props.content?.queryParamsStr ??
+                    `?${parseQueryParams(props.content)}`
                   }`}
                   class={"w-full h-full"}
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"

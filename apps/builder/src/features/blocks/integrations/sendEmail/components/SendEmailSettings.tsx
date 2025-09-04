@@ -27,7 +27,7 @@ import { isNotEmpty } from "@typebot.io/lib/utils";
 import type { Variable } from "@typebot.io/variables/schemas";
 import type { Workspace } from "@typebot.io/workspaces/schemas";
 import React from "react";
-import { SmtpConfigModal } from "./SmtpConfigModal";
+import { SmtpCredentialsCreateDialog } from "./SmtpCredentialsCreateDialog";
 
 type Props = {
   options: SendEmailBlock["options"];
@@ -123,7 +123,7 @@ export const SendEmailSettings = ({ options, onOptionsChange }: Props) => {
         {workspace && (
           <CredentialsDropdown
             type="smtp"
-            workspaceId={workspace.id}
+            scope={{ type: "workspace", workspaceId: workspace.id }}
             currentCredentialsId={getCredentialsIdOrDefault({
               workspace,
               credentialsId: options?.credentialsId,
@@ -182,7 +182,7 @@ export const SendEmailSettings = ({ options, onOptionsChange }: Props) => {
         defaultValue={options?.subject ?? ""}
       />
       <SwitchWithLabel
-        label={"Custom content?"}
+        label={"Custom content"}
         moreInfoContent="By default, the email body will be a recap of what has been collected so far. You can override it with this option."
         initialValue={
           options?.isCustomBody ?? defaultSendEmailOptions.isCustomBody
@@ -210,6 +210,7 @@ export const SendEmailSettings = ({ options, onOptionsChange }: Props) => {
               defaultValue={options.body ?? ""}
               onChange={handleBodyChange}
               lang="html"
+              withLineNumbers={true}
             />
           ) : (
             <Textarea
@@ -238,7 +239,7 @@ export const SendEmailSettings = ({ options, onOptionsChange }: Props) => {
         </Stack>
       )}
 
-      <SmtpConfigModal
+      <SmtpCredentialsCreateDialog
         isOpen={isOpen}
         onClose={onClose}
         onNewCredentials={updateCredentialsId}

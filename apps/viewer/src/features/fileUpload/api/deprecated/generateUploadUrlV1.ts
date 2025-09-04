@@ -1,10 +1,10 @@
 import { publicProcedure } from "@/helpers/server/trpc";
 import { TRPCError } from "@trpc/server";
 import { InputBlockType } from "@typebot.io/blocks-inputs/constants";
-import { getSession } from "@typebot.io/bot-engine/queries/getSession";
+import { getSession } from "@typebot.io/chat-session/queries/getSession";
 import { env } from "@typebot.io/env";
-import { getBlockById } from "@typebot.io/groups/helpers";
-import { parseGroups } from "@typebot.io/groups/schemas";
+import { getBlockById } from "@typebot.io/groups/helpers/getBlockById";
+import { parseGroups } from "@typebot.io/groups/helpers/parseGroups";
 import { generatePresignedPostPolicy } from "@typebot.io/lib/s3/generatePresignedPostPolicy";
 import prisma from "@typebot.io/prisma";
 import { z } from "@typebot.io/zod";

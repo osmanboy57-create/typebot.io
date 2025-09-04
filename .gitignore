@@ -49,3 +49,14 @@ snapshots
 .env.docker
 
 .partykit
+
+.vinxi
+.output
+.vercel
+
+.content-collections
+
+*.local.md
+
+.tanstack
+.nitro

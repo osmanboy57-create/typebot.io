@@ -14,6 +14,11 @@ export const forgedBlockIds = [
   "open-router",
   "nocodb",
   "segment",
+  "posthog",
   "groq",
   "zendesk",
+  "perplexity",
+  "deepseek",
+  "blink",
+  "gmail",
 ] as const satisfies readonly ForgedBlock["type"][];

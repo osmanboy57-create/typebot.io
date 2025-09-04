@@ -1,15 +1,20 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { parseGenerateVariablesOptions } from "@typebot.io/ai/parseGenerateVariablesOptions";
+import { runGenerateVariables } from "@typebot.io/ai/runGenerateVariables";
 import { createAction } from "@typebot.io/forge";
 import { isDefined } from "@typebot.io/lib/utils";
-import { parseGenerateVariablesOptions } from "@typebot.io/openai-block/shared/parseGenerateVariablesOptions";
-import { runGenerateVariables } from "@typebot.io/openai-block/shared/runGenerateVariables";
 import { auth } from "../auth";
 import { anthropicModels } from "../constants";
 
 export const generateVariables = createAction({
   name: "Generate variables",
   auth,
-  options: parseGenerateVariablesOptions({ modelFetch: anthropicModels }),
+  options: parseGenerateVariablesOptions({
+    models: {
+      type: "static",
+      models: anthropicModels,
+    },
+  }),
   turnableInto: [
     {
       blockId: "openai",
@@ -18,6 +23,16 @@ export const generateVariables = createAction({
       blockId: "mistral",
     },
   ],
+  aiGenerate: {
+    models: {
+      type: "static",
+      items: anthropicModels,
+    },
+    getModel: ({ credentials, model }) =>
+      createAnthropic({
+        apiKey: credentials.apiKey,
+      })(model),
+  },
   getSetVariableIds: (options) =>
     options.variablesToExtract?.map((v) => v.variableId).filter(isDefined) ??
     [],

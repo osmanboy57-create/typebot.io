@@ -1,19 +1,21 @@
+import { createTogetherAI } from "@ai-sdk/togetherai";
+import { getChatCompletionSetVarIds } from "@typebot.io/ai/getChatCompletionSetVarIds";
+import { getChatCompletionStreamVarId } from "@typebot.io/ai/getChatCompletionStreamVarId";
+import { parseChatCompletionOptions } from "@typebot.io/ai/parseChatCompletionOptions";
+import { runChatCompletion } from "@typebot.io/ai/runChatCompletion";
+import { runChatCompletionStream } from "@typebot.io/ai/runChatCompletionStream";
 import { createAction } from "@typebot.io/forge";
-import { getChatCompletionSetVarIds } from "@typebot.io/openai-block/shared/getChatCompletionSetVarIds";
-import { getChatCompletionStreamVarId } from "@typebot.io/openai-block/shared/getChatCompletionStreamVarId";
-import { parseChatCompletionOptions } from "@typebot.io/openai-block/shared/parseChatCompletionOptions";
-import { runOpenAIChatCompletion } from "@typebot.io/openai-block/shared/runOpenAIChatCompletion";
-import { runOpenAIChatCompletionStream } from "@typebot.io/openai-block/shared/runOpenAIChatCompletionStream";
 import { auth } from "../auth";
-import { defaultTogetherOptions } from "../constants";
 
 export const createChatCompletion = createAction({
   name: "Create chat completion",
   auth,
   options: parseChatCompletionOptions({
-    modelHelperText:
-      "You can find the list of all the models available [here](https://docs.together.ai/docs/inference-models#chat-models). Copy the model string for API.",
-    defaultTemperature: defaultTogetherOptions.temperature,
+    models: {
+      type: "text",
+      helperText:
+        "You can find the list of all the models available [here](https://docs.together.ai/docs/inference-models#chat-models). Copy the model string for API.",
+    },
   }),
   turnableInto: [
     {
@@ -23,36 +25,82 @@ export const createChatCompletion = createAction({
       blockId: "open-router",
     },
     { blockId: "mistral" },
+    { blockId: "perplexity" },
     {
       blockId: "anthropic",
       transform: (options) => ({
         ...options,
         action: "Create Chat Message",
-        responseMapping: options.responseMapping?.map((res: any) =>
-          res.item === "Message content"
-            ? { ...res, item: "Message Content" }
-            : res,
-        ),
       }),
     },
     { blockId: "groq" },
+    { blockId: "deepseek" },
   ],
   getSetVariableIds: getChatCompletionSetVarIds,
   run: {
-    server: (params) =>
-      runOpenAIChatCompletion({
-        ...params,
-        config: { baseUrl: defaultTogetherOptions.baseUrl },
-      }),
+    server: async ({
+      credentials: { apiKey },
+      options,
+      variables,
+      logs,
+      sessionStore,
+    }) => {
+      if (!apiKey) return logs.add("No API key provided");
+      const modelName = options.model?.trim();
+      if (!modelName) return logs.add("No model provided");
+      if (!options.messages) return logs.add("No messages provided");
+
+      await runChatCompletion({
+        model: createTogetherAI({
+          apiKey,
+        })(modelName),
+        variables,
+        messages: options.messages,
+        tools: options.tools,
+        isVisionEnabled: false,
+        temperature: options.temperature,
+        responseMapping: options.responseMapping,
+        logs,
+        sessionStore,
+      });
+    },
     stream: {
       getStreamVariableId: getChatCompletionStreamVarId,
-      run: async (params) =>
-        runOpenAIChatCompletionStream({
-          ...params,
-          config: {
-            baseUrl: defaultTogetherOptions.baseUrl,
-          },
-        }),
+      run: async ({
+        credentials: { apiKey },
+        options,
+        variables,
+        sessionStore,
+      }) => {
+        if (!apiKey)
+          return {
+            error: {
+              description: "No API key provided",
+            },
+          };
+        const modelName = options.model?.trim();
+        if (!modelName)
+          return {
+            error: { description: "No model provided" },
+          };
+        if (!options.messages)
+          return {
+            error: { description: "No messages provided" },
+          };
+
+        return runChatCompletionStream({
+          model: createTogetherAI({
+            apiKey,
+          })(modelName),
+          variables,
+          messages: options.messages,
+          tools: options.tools,
+          isVisionEnabled: false,
+          temperature: options.temperature,
+          responseMapping: options.responseMapping,
+          sessionStore,
+        });
+      },
     },
   },
 });

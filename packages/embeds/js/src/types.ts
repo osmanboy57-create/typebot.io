@@ -1,34 +1,35 @@
 import type {
   ContinueChatResponse,
   StartChatResponse,
-} from "@typebot.io/bot-engine/schemas/api";
+} from "@typebot.io/chat-api/schemas";
 
 export type BotContext = {
   typebot: StartChatResponse["typebot"];
   resultId?: string;
   isPreview: boolean;
   apiHost?: string;
+  wsHost?: string;
   sessionId: string;
   storage: "local" | "session" | undefined;
 };
 
-export type OutgoingLog = {
-  status: string;
-  description: string;
-  details?: unknown;
-};
-
 export type ClientSideActionContext = {
   apiHost?: string;
+  wsHost?: string;
   sessionId: string;
   resultId?: string;
 };
 
 export type ChatChunk = Pick<
   ContinueChatResponse,
-  "messages" | "input" | "clientSideActions"
+  "messages" | "clientSideActions" | "dynamicTheme"
 > & {
-  streamingMessageId?: string;
+  version: "2";
+  input?: NonNullable<ContinueChatResponse["input"]> & {
+    answer?: InputSubmitContent;
+    isHidden?: boolean;
+  };
+  streamingMessage?: string | string[];
 };
 
 export type Attachment = {
@@ -50,6 +51,12 @@ export type RecordingInputSubmitContent = {
   blobUrl?: string;
 };
 
-export type InputSubmitContent =
+export type ClientSideResult = {
+  type: "clientSideResult";
+  result: string;
+};
+
+export type InputSubmitContent = { status?: "retry" } & (
   | TextInputSubmitContent
-  | RecordingInputSubmitContent;
+  | RecordingInputSubmitContent
+);

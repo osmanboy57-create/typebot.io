@@ -1,6 +1,6 @@
-import { isMobile } from "@/utils/isMobileSignal";
+import { useChatContainerSize } from "@/contexts/ChatContainerSizeContext";
 import { isEmpty } from "@typebot.io/lib/utils";
-import clsx from "clsx";
+import { cx } from "@typebot.io/ui/lib/cva";
 import { Match, Switch, splitProps } from "solid-js";
 import { Button, type ButtonProps } from "./Button";
 import { SendIcon } from "./icons/SendIcon";
@@ -12,6 +12,7 @@ type SendButtonProps = {
 } & ButtonProps;
 
 export const SendButton = (props: SendButtonProps) => {
+  const chatContainerSize = useChatContainerSize();
   const [local, buttonProps] = splitProps(props, [
     "isDisabled",
     "isLoading",
@@ -19,14 +20,14 @@ export const SendButton = (props: SendButtonProps) => {
   ]);
 
   const showIcon =
-    (isMobile() && !local.disableIcon) ||
+    (chatContainerSize() === "sm" && !local.disableIcon) ||
     !buttonProps.children ||
     (typeof buttonProps.children === "string" && isEmpty(buttonProps.children));
   return (
     <Button
       {...buttonProps}
       type="submit"
-      class={clsx(buttonProps.class, "flex items-center")}
+      class={cx(buttonProps.class, "flex items-center")}
       aria-label={showIcon ? "Send" : undefined}
     >
       <Switch>

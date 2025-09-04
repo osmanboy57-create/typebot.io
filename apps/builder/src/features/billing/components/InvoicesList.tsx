@@ -1,10 +1,9 @@
+import { ButtonLink } from "@/components/ButtonLink";
 import { DownloadIcon, FileIcon } from "@/components/icons";
-import { useToast } from "@/hooks/useToast";
-import { trpc } from "@/lib/trpc";
+import { trpc } from "@/lib/queryClient";
 import {
   Checkbox,
   Heading,
-  IconButton,
   Skeleton,
   Stack,
   Table,
@@ -16,6 +15,7 @@ import {
   Thead,
   Tr,
 } from "@chakra-ui/react";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslate } from "@tolgee/react";
 import Link from "next/link";
 import React from "react";
@@ -26,22 +26,16 @@ type Props = {
 
 export const InvoicesList = ({ workspaceId }: Props) => {
   const { t } = useTranslate();
-  const { showToast } = useToast();
-  const { data, status } = trpc.billing.listInvoices.useQuery(
-    {
+  const { data, status } = useQuery(
+    trpc.billing.listInvoices.queryOptions({
       workspaceId,
-    },
-    {
-      onError: (error) => {
-        showToast({ description: error.message });
-      },
-    },
+    }),
   );
 
   return (
     <Stack spacing={6}>
       <Heading fontSize="3xl">{t("billing.invoices.heading")}</Heading>
-      {data?.invoices.length === 0 && status !== "loading" ? (
+      {data?.invoices.length === 0 && status !== "pending" ? (
         <Text>{t("billing.invoices.empty")}</Text>
       ) : (
         <TableContainer>
@@ -70,20 +64,20 @@ export const InvoicesList = ({ workspaceId }: Props) => {
                   <Td>{getFormattedPrice(invoice.amount, invoice.currency)}</Td>
                   <Td>
                     {invoice.url && (
-                      <IconButton
-                        as={Link}
-                        size="xs"
-                        icon={<DownloadIcon />}
+                      <ButtonLink
+                        size="icon"
                         variant="outline"
                         href={invoice.url}
                         target="_blank"
                         aria-label={"Download invoice"}
-                      />
+                      >
+                        <DownloadIcon />
+                      </ButtonLink>
                     )}
                   </Td>
                 </Tr>
               ))}
-              {status === "loading" &&
+              {status === "pending" &&
                 Array.from({ length: 3 }).map((_, idx) => (
                   <Tr key={idx}>
                     <Td>

@@ -1,28 +1,61 @@
 import type { GoogleSheetsInsertRowOptions } from "@typebot.io/blocks-integrations/googleSheets/schema";
-import type { ChatLog } from "../../../schemas/api";
-import type { SessionState } from "../../../schemas/chatSession";
+import type { SessionState } from "@typebot.io/chat-session/schemas";
+import { getGoogleSpreadsheet } from "@typebot.io/credentials/getGoogleSpreadsheet";
+import { parseUnknownError } from "@typebot.io/lib/parseUnknownError";
+import type { LogInSession } from "@typebot.io/logs/schemas";
+import type { SessionStore } from "@typebot.io/runtime-session-store";
 import type { ExecuteIntegrationResponse } from "../../../types";
-import { getAuthenticatedGoogleDoc } from "./helpers/getAuthenticatedGoogleDoc";
 import { parseNewRowObject } from "./helpers/parseNewRowObject";
 
 export const insertRow = async (
-  state: SessionState,
+  options: GoogleSheetsInsertRowOptions,
   {
     outgoingEdgeId,
-    options,
-  }: { outgoingEdgeId?: string; options: GoogleSheetsInsertRowOptions },
+    state,
+    sessionStore,
+  }: {
+    outgoingEdgeId?: string;
+    state: SessionState;
+    sessionStore: SessionStore;
+  },
 ): Promise<ExecuteIntegrationResponse> => {
   const { variables } = state.typebotsQueue[0].typebot;
   if (!options.cellsToInsert || !options.sheetId) return { outgoingEdgeId };
+  if (!options.credentialsId || !options.spreadsheetId)
+    return {
+      outgoingEdgeId,
+      logs: [
+        {
+          status: "error",
+          description: "Missing credentialsId or spreadsheetId",
+        },
+      ],
+    };
 
-  const logs: ChatLog[] = [];
+  const logs: LogInSession[] = [];
 
-  const doc = await getAuthenticatedGoogleDoc({
+  const doc = await getGoogleSpreadsheet({
     credentialsId: options.credentialsId,
     spreadsheetId: options.spreadsheetId,
+    workspaceId: state.workspaceId,
   });
 
-  const parsedValues = parseNewRowObject(variables)(options.cellsToInsert);
+  if (!doc)
+    return {
+      outgoingEdgeId,
+      logs: [
+        {
+          status: "error",
+          description: "Couldn't find credentials in database",
+          context: "While inserting row in spreadsheet",
+        },
+      ],
+    };
+
+  const parsedValues = parseNewRowObject(options.cellsToInsert, {
+    variables,
+    sessionStore,
+  });
 
   try {
     await doc.loadInfo();
@@ -33,11 +66,12 @@ export const insertRow = async (
       description: `Succesfully inserted row in ${doc.title} > ${sheet.title}`,
     });
   } catch (err) {
-    logs.push({
-      status: "error",
-      description: `An error occured while inserting the row`,
-      details: err,
-    });
+    logs.push(
+      await parseUnknownError({
+        err,
+        context: "While inserting row in spreadsheet",
+      }),
+    );
   }
 
   return { outgoingEdgeId, logs };

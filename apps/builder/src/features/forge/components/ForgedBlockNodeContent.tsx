@@ -1,10 +1,11 @@
 import { SetVariableLabel } from "@/components/SetVariableLabel";
 import { ThunderIcon } from "@/components/icons";
 import { useTypebot } from "@/features/editor/providers/TypebotProvider";
-import { Flex, Stack, Text, Tooltip } from "@chakra-ui/react";
+import { Stack, Text } from "@chakra-ui/react";
 import { BubbleBlockType } from "@typebot.io/blocks-bubbles/constants";
 import type { BlockIndices } from "@typebot.io/blocks-core/schemas/schema";
 import type { ForgedBlock } from "@typebot.io/forge-repository/schemas";
+import { Tooltip } from "@typebot.io/ui/components/Tooltip";
 import { useMemo } from "react";
 import { useForgedBlock } from "../hooks/useForgedBlock";
 
@@ -13,10 +14,10 @@ type Props = {
   indices: BlockIndices;
 };
 export const ForgedBlockNodeContent = ({ block, indices }: Props) => {
-  const { blockDef, actionDef } = useForgedBlock(
-    block.type,
-    block.options?.action,
-  );
+  const { blockDef, actionDef } = useForgedBlock({
+    nodeType: block.type,
+    action: block.options?.action,
+  });
   const { typebot } = useTypebot();
 
   const isStreamingNextBlock = useMemo(() => {
@@ -52,7 +53,11 @@ export const ForgedBlockNodeContent = ({ block, indices }: Props) => {
   return (
     <Stack>
       <Text color={isConfigured ? "currentcolor" : "gray.500"} noOfLines={1}>
-        {isConfigured ? block.options.action : "Configure..."}
+        {isConfigured
+          ? actionDef?.parseBlockNodeLabel
+            ? actionDef.parseBlockNodeLabel(block.options)
+            : block.options.action
+          : "Configure..."}
       </Text>
       {typebot &&
         isConfigured &&
@@ -64,21 +69,12 @@ export const ForgedBlockNodeContent = ({ block, indices }: Props) => {
           />
         ))}
       {isStreamingNextBlock && (
-        <Tooltip label="Text bubble content will be streamed">
-          <Flex
-            rounded="full"
-            p="1"
-            bgColor="gray.100"
-            color="purple.500"
-            borderWidth={1}
-            pos="absolute"
-            bottom="-15px"
-            left="118px"
-            zIndex={10}
-          >
-            <ThunderIcon fontSize="sm" />
-          </Flex>
-        </Tooltip>
+        <Tooltip.Root>
+          <Tooltip.Trigger className="rounded-full size-6 p-1 bg-gray-3 text-purple-11 border absolute bottom-[-15px] left-[118px] z-10 flex items-center justify-center">
+            <ThunderIcon />
+          </Tooltip.Trigger>
+          <Tooltip.Popup>Text bubble content will be streamed</Tooltip.Popup>
+        </Tooltip.Root>
       )}
     </Stack>
   );

@@ -1,51 +1,43 @@
 import { BubbleBlockType } from "@typebot.io/blocks-bubbles/constants";
-import type { Block } from "@typebot.io/blocks-core/schemas/schema";
+import type { ContinueChatResponse } from "@typebot.io/chat-api/schemas";
+import type {
+  SessionState,
+  TypebotInSession,
+} from "@typebot.io/chat-session/schemas";
+import { decryptAndRefreshCredentialsData } from "@typebot.io/credentials/decryptAndRefreshCredentials";
+import { getCredentials } from "@typebot.io/credentials/getCredentials";
+import type { Credentials } from "@typebot.io/credentials/schemas";
 import { forgedBlocks } from "@typebot.io/forge-repository/definitions";
 import type { ForgedBlock } from "@typebot.io/forge-repository/schemas";
 import type { LogsStore, VariableStore } from "@typebot.io/forge/types";
-import { decrypt } from "@typebot.io/lib/api/encryption/decrypt";
-import { byId, isDefined } from "@typebot.io/lib/utils";
+import { isDefined } from "@typebot.io/lib/utils";
+import type { SessionStore } from "@typebot.io/runtime-session-store";
 import { deepParseVariables } from "@typebot.io/variables/deepParseVariables";
 import {
   type ParseVariablesOptions,
   parseVariables,
 } from "@typebot.io/variables/parseVariables";
 import type { SetVariableHistoryItem } from "@typebot.io/variables/schemas";
-import { getCredentials } from "../queries/getCredentials";
-import type { ContinueChatResponse } from "../schemas/api";
-import type { SessionState, TypebotInSession } from "../schemas/chatSession";
+import { getNextBlock } from "../getNextBlock";
 import type { ExecuteIntegrationResponse } from "../types";
 import { updateVariablesInSession } from "../updateVariablesInSession";
 
 export const executeForgedBlock = async (
-  state: SessionState,
   block: ForgedBlock,
+  { state, sessionStore }: { state: SessionState; sessionStore: SessionStore },
 ): Promise<ExecuteIntegrationResponse> => {
   const blockDef = forgedBlocks[block.type];
   if (!blockDef) return { outgoingEdgeId: block.outgoingEdgeId };
-  const action = blockDef.actions.find((a) => a.name === block.options.action);
-  const noCredentialsError = {
-    status: "error",
-    description: "Credentials not provided for integration",
-  };
-
-  let credentials: { data: string; iv: string } | null = null;
-  if (blockDef.auth) {
-    if (!block.options.credentialsId) {
-      return {
-        outgoingEdgeId: block.outgoingEdgeId,
-        logs: [noCredentialsError],
-      };
-    }
-    credentials = await getCredentials(block.options.credentialsId);
-    if (!credentials) {
-      console.error("Could not find credentials in database");
-      return {
-        outgoingEdgeId: block.outgoingEdgeId,
-        logs: [noCredentialsError],
-      };
-    }
-  }
+  const action = blockDef.actions.find((a) => a.name === block.options?.action);
+  if (!block.options || !action)
+    return {
+      outgoingEdgeId: block.outgoingEdgeId,
+      logs: [
+        {
+          description: `${block.type} is not configured`,
+        },
+      ],
+    };
 
   const typebot = state.typebotsQueue[0].typebot;
   if (
@@ -103,10 +95,11 @@ export const executeForgedBlock = async (
       setVariableHistory.push(...newSetVariableHistory);
     },
     parse: (text: string, params?: ParseVariablesOptions) =>
-      parseVariables(
-        newSessionState.typebotsQueue[0].typebot.variables,
-        params,
-      )(text),
+      parseVariables(text, {
+        variables: newSessionState.typebotsQueue[0].typebot.variables,
+        sessionStore,
+        ...params,
+      }),
     list: () => newSessionState.typebotsQueue[0].typebot.variables,
   };
   const logs: NonNullable<ContinueChatResponse["logs"]> = [];
@@ -122,19 +115,67 @@ export const executeForgedBlock = async (
       logs.push(log);
     },
   };
-  const credentialsData = credentials
-    ? await decrypt(credentials.data, credentials.iv)
-    : undefined;
 
-  const parsedOptions = deepParseVariables(
-    state.typebotsQueue[0].typebot.variables,
-    { removeEmptyStrings: true },
-  )(block.options);
+  let credentialsData: any;
+  if (blockDef.auth) {
+    const noCredsErrorLog = [
+      {
+        status: "error",
+        description: `Could not find credentials for block ${block.type}`,
+      },
+    ];
+
+    if (!block.options.credentialsId)
+      return {
+        outgoingEdgeId: block.outgoingEdgeId,
+        logs: noCredsErrorLog,
+      };
+
+    const defaultClientEnvKeys =
+      "defaultClientEnvKeys" in blockDef.auth
+        ? blockDef.auth.defaultClientEnvKeys
+        : undefined;
+
+    const credentials = await getCredentials(
+      block.options.credentialsId,
+      state.workspaceId,
+    );
+
+    if (!credentials)
+      return {
+        outgoingEdgeId: block.outgoingEdgeId,
+        logs: noCredsErrorLog,
+      };
+
+    credentialsData = await decryptAndRefreshCredentialsData(
+      {
+        id: block.options.credentialsId,
+        type: blockDef.id as Credentials["type"],
+        data: credentials.data,
+        iv: credentials.iv,
+      },
+      defaultClientEnvKeys,
+    );
+
+    if (!credentialsData)
+      return {
+        outgoingEdgeId: block.outgoingEdgeId,
+        logs: noCredsErrorLog,
+      };
+  }
+
+  const parsedOptions = deepParseVariables(block.options, {
+    variables: newSessionState.typebotsQueue[0].typebot.variables,
+    sessionStore,
+    removeEmptyStrings: true,
+  });
+
   await action?.run?.server?.({
-    credentials: credentialsData ?? {},
+    credentials: credentialsData,
     options: parsedOptions,
     variables,
     logs: logsStore,
+    sessionStore,
   });
 
   const clientSideActions: ExecuteIntegrationResponse["clientSideActions"] = [];
@@ -193,7 +234,10 @@ const isNextBubbleTextWithStreamingVar =
       (variable) => variable.id === streamVariableId,
     );
     if (!streamVariable) return false;
-    const nextBlock = getNextBlock(typebot)(blockId);
+    const nextBlock = getNextBlock(blockId, {
+      groups: typebot.groups,
+      edges: typebot.edges,
+    });
     if (!nextBlock) return false;
     return (
       nextBlock.type === BubbleBlockType.TEXT &&
@@ -202,29 +246,3 @@ const isNextBubbleTextWithStreamingVar =
         `{{${streamVariable.name}}}`
     );
   };
-
-const getNextBlock =
-  (typebot: TypebotInSession) =>
-  (blockId: string): Block | undefined => {
-    const group = typebot.groups.find((group) =>
-      group.blocks.find(byId(blockId)),
-    );
-    if (!group) return;
-    const blockIndex = group.blocks.findIndex(byId(blockId));
-    const nextBlockInGroup = group.blocks.at(blockIndex + 1);
-    if (nextBlockInGroup) return nextBlockInGroup;
-    const outgoingEdgeId = group.blocks.at(blockIndex)?.outgoingEdgeId;
-    if (!outgoingEdgeId) return;
-    const outgoingEdge = typebot.edges.find(byId(outgoingEdgeId));
-    if (!outgoingEdge) return;
-    const connectedGroup = typebot.groups.find(byId(outgoingEdge?.to.groupId));
-    if (!connectedGroup) return;
-    return outgoingEdge.to.blockId
-      ? connectedGroup.blocks.find(
-          (block) => block.id === outgoingEdge.to.blockId,
-        )
-      : connectedGroup?.blocks.at(0);
-  };
-
-const isCredentialsV2 = (credentials: { iv: string }) =>
-  credentials.iv.length === 24;

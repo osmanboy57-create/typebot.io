@@ -1,11 +1,12 @@
 import { defaultChatwootOptions } from "@typebot.io/blocks-integrations/chatwoot/constants";
 import type { ChatwootBlock } from "@typebot.io/blocks-integrations/chatwoot/schema";
+import type { SessionState } from "@typebot.io/chat-session/schemas";
 import { env } from "@typebot.io/env";
 import { isDefined } from "@typebot.io/lib/utils";
+import type { SessionStore } from "@typebot.io/runtime-session-store";
 import { extractVariablesFromText } from "@typebot.io/variables/extractVariablesFromText";
 import { parseGuessedValueType } from "@typebot.io/variables/parseGuessedValueType";
 import { parseVariables } from "@typebot.io/variables/parseVariables";
-import type { SessionState } from "../../../schemas/chatSession";
 import type { ExecuteIntegrationResponse } from "../../../types";
 
 const parseSetUserCode = (
@@ -14,7 +15,7 @@ const parseSetUserCode = (
 ) =>
   user?.email || user?.id
     ? `
-window.$chatwoot.setUser(${user?.id ?? user.email ?? `"${resultId}"`}, {
+window.$chatwoot.setUser(${user?.id || user.email || `"${resultId}"`}, {
   email: ${user?.email ? user.email : "undefined"},
   name: ${user?.name ? user.name : "undefined"},
   avatar_url: ${user?.avatarUrl ? user.avatarUrl : "undefined"},
@@ -73,8 +74,8 @@ if (window.$chatwoot) {
 `;
 
 export const executeChatwootBlock = (
-  state: SessionState,
   block: ChatwootBlock,
+  { sessionStore, state }: { sessionStore: SessionStore; state: SessionState },
 ): ExecuteIntegrationResponse => {
   if (state.whatsApp) return { outgoingEdgeId: block.outgoingEdgeId };
   const { typebot, resultId } = state.typebotsQueue[0];
@@ -96,9 +97,11 @@ export const executeChatwootBlock = (
         type: "chatwoot",
         chatwoot: {
           scriptToExecute: {
-            content: parseVariables(typebot.variables, { fieldToParse: "id" })(
-              chatwootCode,
-            ),
+            content: parseVariables(chatwootCode, {
+              variables: typebot.variables,
+              sessionStore,
+              fieldToParse: "id",
+            }),
             args: extractVariablesFromText(typebot.variables)(chatwootCode).map(
               (variable) => ({
                 id: variable.id,
@@ -115,7 +118,6 @@ export const executeChatwootBlock = (
             {
               status: "info",
               description: "Chatwoot block is not supported in preview",
-              details: null,
             },
           ]
         : undefined,

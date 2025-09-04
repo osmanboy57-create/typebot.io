@@ -1,9 +1,8 @@
 import { isWriteTypebotForbidden } from "@/features/typebot/helpers/isWriteTypebotForbidden";
-import { getUserRoleInWorkspace } from "@/features/workspace/helpers/getUserRoleInWorkspace";
+import { getUserModeInWorkspace } from "@/features/workspace/helpers/getUserRoleInWorkspace";
 import { authenticatedProcedure } from "@/helpers/server/trpc";
 import { TRPCError } from "@trpc/server";
 import prisma from "@typebot.io/prisma";
-import { WorkspaceRole } from "@typebot.io/prisma/enum";
 import { clientSideCreateEventSchema } from "@typebot.io/telemetry/schemas";
 import { trackEvents } from "@typebot.io/telemetry/trackEvents";
 import { z } from "@typebot.io/zod";
@@ -67,12 +66,8 @@ export const trackClientEvents = authenticatedProcedure
     for (const event of events) {
       if ("workspaceId" in event) {
         const workspace = workspaces.find((w) => w.id === event.workspaceId);
-        const userRole = getUserRoleInWorkspace(user.id, workspace?.members);
-        if (
-          userRole === undefined ||
-          userRole === WorkspaceRole.GUEST ||
-          !workspace
-        )
+        const userRole = getUserModeInWorkspace(user.id, workspace?.members);
+        if (userRole === "guest" || !workspace)
           throw new TRPCError({
             code: "NOT_FOUND",
             message: "Workspace not found",

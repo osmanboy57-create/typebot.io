@@ -1,18 +1,19 @@
 import { BubbleBlockType } from "@typebot.io/blocks-bubbles/constants";
 import { InputBlockType } from "@typebot.io/blocks-inputs/constants";
-import { computeTypingDuration } from "@typebot.io/bot-engine/computeTypingDuration";
-import type { ContinueChatResponse } from "@typebot.io/bot-engine/schemas/api";
-import type { SessionState } from "@typebot.io/bot-engine/schemas/chatSession";
-import type { ClientSideAction } from "@typebot.io/bot-engine/schemas/clientSideAction";
+import type { ClientSideAction } from "@typebot.io/chat-api/clientSideAction";
+import type { ContinueChatResponse } from "@typebot.io/chat-api/schemas";
+import type { SessionState } from "@typebot.io/chat-session/schemas";
+import type { WhatsAppCredentials } from "@typebot.io/credentials/schemas";
 import { isNotDefined } from "@typebot.io/lib/utils";
+import { computeTypingDuration } from "@typebot.io/settings/computeTypingDuration";
 import { defaultSettings } from "@typebot.io/settings/constants";
 import type { Settings } from "@typebot.io/settings/schemas";
 import { convertInputToWhatsAppMessages } from "./convertInputToWhatsAppMessage";
 import { convertMessageToWhatsAppMessage } from "./convertMessageToWhatsAppMessage";
-import type { WhatsAppCredentials, WhatsAppSendingMessage } from "./schemas";
+import type { WhatsAppSendingMessage } from "./schemas";
 import { sendWhatsAppMessage } from "./sendWhatsAppMessage";
 
-// Media can take some time to be delivered. This make sure we don't send a message before the media is delivered.
+// If not using mediaId, it can take some time to be delivered. This make sure we don't send a message before the media is delivered.
 const messageAfterMediaTimeout = 5000;
 
 type Props = {
@@ -64,7 +65,15 @@ export const sendChatReplyToWhatsApp = async ({
         setTimeout(resolve, delayBetweenBubbles * 1000),
       );
     }
-    const whatsAppMessage = convertMessageToWhatsAppMessage(message);
+    const whatsAppMessage = await convertMessageToWhatsAppMessage({
+      message,
+      mediaCache: state.publicTypebotId
+        ? {
+            publicTypebotId: state.publicTypebotId,
+            credentials,
+          }
+        : undefined,
+    });
     if (isNotDefined(whatsAppMessage)) continue;
     const lastSentMessageIsMedia = ["audio", "video", "image"].includes(
       sentMessages.at(-1)?.type ?? "",
@@ -74,14 +83,15 @@ export const sendChatReplyToWhatsApp = async ({
       state.typingEmulation?.isDisabledOnFirstMessage ??
       defaultSettings.typingEmulation.isDisabledOnFirstMessage;
 
-    const typingDuration = lastSentMessageIsMedia
-      ? messageAfterMediaTimeout
-      : isFirstChatChunk && i === 0 && isTypingEmulationDisabled
-        ? 0
-        : getTypingDuration({
-            message: whatsAppMessage,
-            typingEmulation: state.typingEmulation,
-          });
+    const typingDuration =
+      lastSentMessageIsMedia && !state.publicTypebotId
+        ? messageAfterMediaTimeout
+        : isFirstChatChunk && i === 0 && isTypingEmulationDisabled
+          ? 0
+          : getTypingDuration({
+              message: whatsAppMessage,
+              typingEmulation: state.typingEmulation,
+            });
     if ((typingDuration ?? 0) > 0)
       await new Promise((resolve) => setTimeout(resolve, typingDuration));
     await sendWhatsAppMessage({
@@ -103,20 +113,28 @@ export const sendChatReplyToWhatsApp = async ({
   }
 
   if (input) {
-    const inputWhatsAppMessages = convertInputToWhatsAppMessages(
+    const inputWhatsAppMessages = await convertInputToWhatsAppMessages({
       input,
-      messages.at(-1),
-    );
+      lastMessage: messages.at(-1),
+      systemMessages: state.typebotsQueue[0].typebot.systemMessages,
+      mediaCache: state.publicTypebotId
+        ? {
+            publicTypebotId: state.publicTypebotId,
+            credentials,
+          }
+        : undefined,
+    });
     for (const message of inputWhatsAppMessages) {
       const lastSentMessageIsMedia = ["audio", "video", "image"].includes(
         sentMessages.at(-1)?.type ?? "",
       );
-      const typingDuration = lastSentMessageIsMedia
-        ? messageAfterMediaTimeout
-        : getTypingDuration({
-            message,
-            typingEmulation: state.typingEmulation,
-          });
+      const typingDuration =
+        lastSentMessageIsMedia && !state.publicTypebotId
+          ? messageAfterMediaTimeout
+          : getTypingDuration({
+              message,
+              typingEmulation: state.typingEmulation,
+            });
       if (typingDuration)
         await new Promise((resolve) => setTimeout(resolve, typingDuration));
       await sendWhatsAppMessage({

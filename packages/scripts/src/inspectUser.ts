@@ -1,29 +1,40 @@
-import { confirm, isCancel, text } from "@clack/prompts";
+import * as p from "@clack/prompts";
+import { confirm, isCancel } from "@clack/prompts";
 import prisma from "@typebot.io/prisma";
 import { promptAndSetEnvironment } from "./utils";
 
 const inspectUser = async () => {
   await promptAndSetEnvironment("production");
-  const email = await text({
-    message: "User email",
+
+  const type = await p.select<"id" | "email">({
+    message: "Select way",
+    options: [
+      { label: "ID", value: "id" },
+      { label: "Email", value: "email" },
+    ],
   });
 
-  if (!email || isCancel(email)) process.exit();
+  if (!type || isCancel(type)) process.exit();
+
+  const val = await p.text({
+    message: "Enter value",
+  });
+
+  if (!val || isCancel(val)) process.exit();
 
   const user = await prisma.user.findFirst({
     where: {
-      email,
+      [type]: val,
     },
     select: {
+      id: true,
       name: true,
       createdAt: true,
       lastActivityAt: true,
       company: true,
       onboardingCategories: true,
+      termsAcceptedAt: true,
       workspaces: {
-        where: {
-          role: "ADMIN",
-        },
         select: {
           workspace: {
             select: {
@@ -42,9 +53,6 @@ const inspectUser = async () => {
                       email: true,
                     },
                   },
-                },
-                where: {
-                  user: { email: { not: email } },
                 },
               },
               additionalStorageIndex: true,

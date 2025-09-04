@@ -64,6 +64,8 @@ export const getInputBlockLabel = (
   [InputBlockType.PAYMENT]: t("editor.sidebarBlock.payment.label"),
   [InputBlockType.RATING]: t("editor.sidebarBlock.rating.label"),
   [InputBlockType.FILE]: t("editor.sidebarBlock.file.label"),
+  [InputBlockType.TIME]: "Time",
+  [InputBlockType.CARDS]: "Cards",
 });
 
 export const getLogicBlockLabel = (
@@ -78,6 +80,7 @@ export const getLogicBlockLabel = (
   [LogicBlockType.JUMP]: t("editor.sidebarBlock.jump.label"),
   [LogicBlockType.AB_TEST]: t("editor.sidebarBlock.abTest.label"),
   [LogicBlockType.WEBHOOK]: "Webhook",
+  [LogicBlockType.RETURN]: "Return",
 });
 
 export const getIntegrationBlockLabel = (

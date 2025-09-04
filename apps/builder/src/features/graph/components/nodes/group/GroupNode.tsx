@@ -1,14 +1,10 @@
-import { ContextMenu } from "@/components/ContextMenu";
-import {
-  RightPanel,
-  useEditor,
-} from "@/features/editor/providers/EditorProvider";
+import { useEditor } from "@/features/editor/providers/EditorProvider";
 import { useTypebot } from "@/features/editor/providers/TypebotProvider";
 import { groupWidth } from "@/features/graph/constants";
-import { useGroupsStore } from "@/features/graph/hooks/useGroupsStore";
+import { useSelectionStore } from "@/features/graph/hooks/useSelectionStore";
 import { useBlockDnd } from "@/features/graph/providers/GraphDndProvider";
 import { useGraph } from "@/features/graph/providers/GraphProvider";
-import { setMultipleRefs } from "@/helpers/setMultipleRefs";
+import { useRightPanel } from "@/hooks/useRightPanel";
 import {
   Editable,
   EditableInput,
@@ -19,23 +15,22 @@ import {
 } from "@chakra-ui/react";
 import type { GroupV6 } from "@typebot.io/groups/schemas";
 import { isEmpty, isNotDefined } from "@typebot.io/lib/utils";
+import { ContextMenu } from "@typebot.io/ui/components/ContextMenu";
 import { useDrag } from "@use-gesture/react";
 import React, { useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { BlockNodesList } from "../block/BlockNodesList";
 import { GroupFocusToolbar } from "./GroupFocusToolbar";
-import { GroupNodeContextMenu } from "./GroupNodeContextMenu";
-
+import { GroupNodeContextMenuPopup } from "./GroupNodeContextMenuPopup";
 type Props = {
   group: GroupV6;
   groupIndex: number;
 };
 
 export const GroupNode = ({ group, groupIndex }: Props) => {
-  const bg = useColorModeValue("white", "gray.900");
-  const previewingBorderColor = useColorModeValue("blue.400", "blue.300");
-  const borderColor = useColorModeValue("white", "gray.800");
-  const editableHoverBg = useColorModeValue("gray.100", "gray.700");
+  const bg = useColorModeValue("white", "gray.950");
+  const previewingBorderColor = useColorModeValue("orange.400", "orange.300");
+  const editableHoverBg = useColorModeValue("gray.200", "gray.700");
   const {
     connectingIds,
     setConnectingIds,
@@ -46,11 +41,13 @@ export const GroupNode = ({ group, groupIndex }: Props) => {
   } = useGraph();
   const { typebot, updateGroup, updateGroupsCoordinates } = useTypebot();
   const { setMouseOverGroup, mouseOverGroup } = useBlockDnd();
-  const { setRightPanel, setStartPreviewAtGroup } = useEditor();
+  const { setStartPreviewFrom } = useEditor();
+  const [, setRightPanel] = useRightPanel();
 
   const [isMouseDown, setIsMouseDown] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [groupTitle, setGroupTitle] = useState(group.title);
+  const [isContextMenuOpened, setIsContextMenuOpened] = useState(false);
 
   const isPreviewing =
     previewingBlock?.groupId === group.id ||
@@ -61,23 +58,23 @@ export const GroupNode = ({ group, groupIndex }: Props) => {
           isNotDefined(previewingEdge.to.blockId))));
 
   const groupRef = useRef<HTMLDivElement | null>(null);
-  const isDraggingGraph = useGroupsStore((state) => state.isDraggingGraph);
-  const focusedGroups = useGroupsStore(
-    useShallow((state) => state.focusedGroups),
+  const isDraggingGraph = useSelectionStore((state) => state.isDraggingGraph);
+  const focusedGroups = useSelectionStore(
+    useShallow((state) => state.focusedElementsId),
   );
-  const groupCoordinates = useGroupsStore(
+  const groupCoordinates = useSelectionStore(
     useShallow((state) =>
-      state.groupsCoordinates
-        ? state.groupsCoordinates[group.id]
+      state.elementsCoordinates
+        ? state.elementsCoordinates[group.id]
         : group.graphCoordinates,
     ),
   );
-  const { moveFocusedGroups, focusGroup, getGroupsCoordinates } =
-    useGroupsStore(
+  const { moveFocusedElements, focusElement, getElementsCoordinates } =
+    useSelectionStore(
       useShallow((state) => ({
-        getGroupsCoordinates: state.getGroupsCoordinates,
-        moveFocusedGroups: state.moveFocusedGroups,
-        focusGroup: state.focusGroup,
+        getElementsCoordinates: state.getElementsCoordinates,
+        moveFocusedElements: state.moveFocusedElements,
+        focusElement: state.focusElement,
       })),
     );
 
@@ -87,6 +84,10 @@ export const GroupNode = ({ group, groupIndex }: Props) => {
         isNotDefined(connectingIds.target?.blockId),
     );
   }, [connectingIds, group.id]);
+
+  useEffect(() => {
+    if (group.title !== groupTitle) setGroupTitle(group.title);
+  }, [group.title]);
 
   const handleTitleSubmit = (title: string) =>
     updateGroup(groupIndex, { title });
@@ -107,8 +108,8 @@ export const GroupNode = ({ group, groupIndex }: Props) => {
   };
 
   const startPreviewAtThisGroup = () => {
-    setStartPreviewAtGroup(group.id);
-    setRightPanel(RightPanel.PREVIEW);
+    setStartPreviewFrom({ type: "group", id: group.id });
+    setRightPanel("preview");
   };
 
   useDrag(
@@ -125,18 +126,18 @@ export const GroupNode = ({ group, groupIndex }: Props) => {
         setIsMouseDown(true);
         if (focusedGroups.find((id) => id === group.id) && !event.shiftKey)
           return;
-        focusGroup(group.id, event.shiftKey);
+        focusElement(group.id, event.shiftKey);
       }
 
-      moveFocusedGroups({
+      moveFocusedElements({
         x: delta[0] / graphPosition.scale,
         y: delta[1] / graphPosition.scale,
       });
 
       if (last) {
-        const newGroupsCoordinates = getGroupsCoordinates();
-        if (!newGroupsCoordinates) return;
-        updateGroupsCoordinates(newGroupsCoordinates);
+        const newElementsCoordinates = getElementsCoordinates();
+        if (!newElementsCoordinates) return;
+        updateGroupsCoordinates(newElementsCoordinates);
         setIsMouseDown(false);
       }
     },
@@ -153,25 +154,31 @@ export const GroupNode = ({ group, groupIndex }: Props) => {
   const isFocused = focusedGroups.includes(group.id);
 
   return (
-    <ContextMenu<HTMLDivElement>
-      onOpen={() => focusGroup(group.id)}
-      renderMenu={() => <GroupNodeContextMenu />}
-      isDisabled={isReadOnly}
+    <ContextMenu.Root
+      onOpenChange={(open) => {
+        setIsContextMenuOpened(open);
+        if (open) focusElement(group.id);
+      }}
+      disabled={isReadOnly}
     >
-      {(ref, isContextMenuOpened) => (
+      <ContextMenu.Trigger>
         <Stack
-          ref={setMultipleRefs([ref, groupRef])}
+          ref={groupRef}
           id={`group-${group.id}`}
           data-testid="group"
           className="group"
-          p="4"
+          data-selectable={group.id}
+          userSelect="none"
+          px="4"
+          pt="4"
+          pb="2"
           rounded="xl"
           bg={bg}
           borderWidth="1px"
           borderColor={
             isConnecting || isContextMenuOpened || isPreviewing || isFocused
               ? previewingBorderColor
-              : borderColor
+              : undefined
           }
           w={groupWidth}
           transition="border 300ms, box-shadow 200ms"
@@ -185,17 +192,16 @@ export const GroupNode = ({ group, groupIndex }: Props) => {
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
           cursor={isMouseDown ? "grabbing" : "pointer"}
-          shadow="md"
-          _hover={{ shadow: "lg" }}
-          zIndex={isFocused ? 10 : 1}
-          spacing={isEmpty(group.title) ? "0" : "2"}
+          _hover={{ shadow: "md" }}
+          zIndex={isFocused ? 1 : undefined}
+          spacing={0}
           pointerEvents={isDraggingGraph ? "none" : "auto"}
         >
           <Editable
             value={groupTitle}
             onChange={setGroupTitle}
             onSubmit={handleTitleSubmit}
-            fontWeight="semibold"
+            fontWeight="medium"
             pr="8"
           >
             <EditablePreview
@@ -203,7 +209,6 @@ export const GroupNode = ({ group, groupIndex }: Props) => {
                 bg: editableHoverBg,
               }}
               px="1"
-              userSelect={"none"}
               style={
                 isEmpty(groupTitle)
                   ? {
@@ -221,10 +226,10 @@ export const GroupNode = ({ group, groupIndex }: Props) => {
             <BlockNodesList
               blocks={group.blocks}
               groupIndex={groupIndex}
-              groupRef={ref}
+              groupRef={groupRef}
             />
           )}
-          {!isReadOnly && focusedGroups.length === 1 && (
+          {focusedGroups.length === 1 && (
             <SlideFade
               in={isFocused}
               style={{
@@ -236,12 +241,14 @@ export const GroupNode = ({ group, groupIndex }: Props) => {
             >
               <GroupFocusToolbar
                 groupId={group.id}
+                isReadOnly={isReadOnly}
                 onPlayClick={startPreviewAtThisGroup}
               />
             </SlideFade>
           )}
         </Stack>
-      )}
-    </ContextMenu>
+      </ContextMenu.Trigger>
+      <GroupNodeContextMenuPopup />
+    </ContextMenu.Root>
   );
 };

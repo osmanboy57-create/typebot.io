@@ -5,6 +5,7 @@ import { InputBlockType } from "@typebot.io/blocks-inputs/constants";
 import { createTypebots } from "@typebot.io/playwright/databaseActions";
 import { parseDefaultGroupWithBlock } from "@typebot.io/playwright/databaseHelpers";
 import { freeWorkspaceId } from "@typebot.io/playwright/databaseSetup";
+import { latestTypebotVersion } from "@typebot.io/schemas/versions";
 
 test.describe.configure({ mode: "parallel" });
 
@@ -31,8 +32,9 @@ test("options should work", async ({ page }) => {
     page.getByRole("img", { name: "Attached image 1" }),
   ).toBeVisible();
   await page.click('text="Collect file"');
-  await page.click('text="Required?"');
-  await page.click('text="Allow multiple files?"');
+  await page.click('text="Required"');
+  await page.click('text="Allow multiple files"');
+  await page.getByRole("button", { name: "Labels" }).click();
   await page.fill("div[contenteditable=true]", "<strong>Upload now!!</strong>");
   await page.click('text="Labels"');
   await page.fill('[value="Upload"]', "Go");
@@ -64,13 +66,13 @@ test.describe("Free workspace", () => {
         ...parseDefaultGroupWithBlock({
           type: InputBlockType.FILE,
         }),
-        version: "6",
+        version: latestTypebotVersion,
         workspaceId: freeWorkspaceId,
       },
     ]);
     await page.goto(`/typebots/${typebotId}/edit`);
     await page.click('text="Collect file"');
-    await page.click('text="Allow multiple files?"');
+    await page.click('text="Allow multiple files"');
     await page.click('text="Publish"');
     await expect(
       page.locator(

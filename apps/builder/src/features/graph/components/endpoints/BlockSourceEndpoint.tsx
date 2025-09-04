@@ -27,10 +27,10 @@ export const BlockSourceEndpoint = ({
   groupId: string;
   isHidden?: boolean;
 }) => {
-  const id = source.itemId ?? source.blockId;
-  const color = useColorModeValue("blue.200", "blue.100");
-  const connectedColor = useColorModeValue("blue.300", "blue.200");
-  const bg = useColorModeValue("gray.100", "gray.700");
+  const id = source.pathId ?? source.itemId ?? source.blockId;
+  const color = useColorModeValue("orange.200", "orange.100");
+  const connectedColor = useColorModeValue("orange.300", "orange.200");
+  const bg = useColorModeValue("white", "gray.700");
   const { setConnectingIds, previewingEdge, graphPosition } = useGraph();
   const { setSourceEndpointYOffset, deleteSourceEndpointYOffset } =
     useEndpoints();
@@ -132,6 +132,7 @@ export const BlockSourceEndpoint = ({
         justify="center"
         align="center"
         bg={bg}
+        borderWidth={1}
         rounded="full"
       >
         <Flex
@@ -143,7 +144,8 @@ export const BlockSourceEndpoint = ({
             previewingEdge &&
             "blockId" in previewingEdge.from &&
             previewingEdge.from.blockId === source.blockId &&
-            previewingEdge.from.itemId === source.itemId
+            previewingEdge.from.itemId === source.itemId &&
+            previewingEdge.from.pathId === source.pathId
               ? connectedColor
               : color
           }

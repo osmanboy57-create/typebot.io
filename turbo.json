@@ -1,10 +1,15 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": [".env"],
-  "globalEnv": ["DATABASE_URL", "SKIP_ENV_CHECK"],
+  "globalEnv": ["DATABASE_URL", "SKIP_ENV_CHECK", "DATABASE_URL_REPLICA"],
   "globalPassThroughEnv": ["ENCRYPTION_SECRET"],
+  "envMode": "loose",
   "tasks": {
+    "typecheck": {
+      "cache": false
+    },
     "dev": {
+      "cache": false,
       "dependsOn": ["^db:generate", "^db:push", "@typebot.io/react#build"],
       "persistent": true
     },
@@ -16,7 +21,8 @@
         "!.next/cache/**",
         "dist/**",
         "build/**",
-        "public/__ENV.js"
+        "public/__ENV.js",
+        ".vercel"
       ],
       "inputs": ["$TURBO_DEFAULT$", ".env"],
       "outputLogs": "new-only"
@@ -39,17 +45,33 @@
     "db:push": {
       "cache": false
     },
-    "db:cleanDatabase": {
-      "env": ["NEXTAUTH_URL"],
-      "dependsOn": ["@typebot.io/prisma#db:generate"],
+    "check-broken-links": {
       "cache": false
     },
-    "checkAndReportChatsUsage": {
+    "cron:hourly": {
       "env": ["STRIPE_*", "NEXTAUTH_URL", "SMTP_*"],
       "dependsOn": ["@typebot.io/prisma#db:generate"],
       "cache": false
     },
-    "//#format-and-lint": {},
+    "cron:daily": {
+      "env": ["NEXTAUTH_URL"],
+      "dependsOn": ["@typebot.io/prisma#db:generate"],
+      "cache": false
+    },
+    "cron:monthly": {
+      "env": ["NEXTAUTH_URL"],
+      "dependsOn": ["@typebot.io/prisma#db:generate"],
+      "cache": false
+    },
+    "test": {
+      "dependsOn": ["^test"]
+    },
+    "lint-repo": {
+      "cache": false
+    },
+    "//#format-and-lint": {
+      "cache": false
+    },
     "//#format-and-lint:fix": {
       "cache": false
     }

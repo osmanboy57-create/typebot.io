@@ -1,10 +1,9 @@
 import { TextLink } from "@/components/TextLink";
-import { useToast } from "@/hooks/useToast";
+import { toast } from "@/lib/toast";
 import { sanitizeUrl } from "@braintree/sanitize-url";
 import {
   Alert,
   AlertIcon,
-  Button,
   FormControl,
   FormLabel,
   HStack,
@@ -19,14 +18,8 @@ import {
   VStack,
 } from "@chakra-ui/react";
 import { useTranslate } from "@tolgee/react";
-import type { BuiltInProviderType } from "next-auth/providers/index";
-import {
-  type ClientSafeProvider,
-  type LiteralUnion,
-  getProviders,
-  signIn,
-  useSession,
-} from "next-auth/react";
+import { Button } from "@typebot.io/ui/components/Button";
+import { getProviders, signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useQueryState } from "nuqs";
 import type { ChangeEvent, FormEvent } from "react";
@@ -54,11 +47,8 @@ export const SignInForm = ({
   const [emailValue, setEmailValue] = useState(defaultEmail ?? "");
   const [isMagicCodeSent, setIsMagicCodeSent] = useState(false);
 
-  const { showToast } = useToast();
   const [providers, setProviders] =
-    useState<
-      Record<LiteralUnion<BuiltInProviderType, string>, ClientSafeProvider>
-    >();
+    useState<Awaited<ReturnType<typeof getProviders>>>();
 
   const hasNoAuthProvider =
     !isLoadingProviders && Object.keys(providers ?? {}).length === 0;
@@ -77,13 +67,13 @@ export const SignInForm = ({
 
   useEffect(() => {
     if (authError === "ip-banned") {
-      showToast({
-        status: "info",
+      toast({
+        type: "info",
         description:
           "Your account has suspicious activity and is being reviewed by our team. Feel free to contact us.",
       });
     }
-  }, [authError, showToast]);
+  }, [authError]);
 
   const handleEmailChange = (e: ChangeEvent<HTMLInputElement>) =>
     setEmailValue(e.target.value);
@@ -94,36 +84,36 @@ export const SignInForm = ({
     if (isMagicCodeSent) return;
     setAuthLoading(true);
     try {
-      const response = await signIn("email", {
+      const response = await signIn("nodemailer", {
         email: emailValue,
         redirect: false,
       });
       if (response?.error) {
-        if (response.error.includes("rate-limited"))
-          showToast({
-            status: "info",
+        if (response.error.includes("too-many-requests"))
+          toast({
+            type: "info",
             description: t("auth.signinErrorToast.tooManyRequests"),
           });
         else if (response.error.includes("sign-up-disabled"))
-          showToast({
-            title: t("auth.signinErrorToast.title"),
-            description: t("auth.signinErrorToast.description"),
+          toast({
+            type: "info",
+            description: t("auth.signinErrorToast.title"),
+          });
+        else if (response.error.includes("email-not-legit"))
+          toast({
+            description: "Please use a valid email address",
           });
         else
-          showToast({
-            status: "info",
+          toast({
             description: t("errorMessage"),
-            details: {
-              content: "Check server logs to see relevent error message.",
-              lang: "json",
-            },
+            details: "Check server logs to see relevent error message.",
           });
       } else {
         setIsMagicCodeSent(true);
       }
     } catch (e) {
-      showToast({
-        status: "info",
+      toast({
+        type: "info",
         description: "An error occured while signing in",
       });
     }
@@ -150,13 +140,13 @@ export const SignInForm = ({
       </Text>
     );
   return (
-    <Stack spacing="4" w="330px">
+    <Stack spacing="6" w="330px">
       {!isMagicCodeSent && (
         <>
           <SocialLoginButtons providers={providers} />
-          {providers?.email && (
+          {providers?.nodemailer && (
             <>
-              <DividerWithText mt="6">{t("auth.orEmailLabel")}</DividerWithText>
+              <DividerWithText>{t("auth.orEmailLabel")}</DividerWithText>
               <HStack as="form" onSubmit={handleEmailSubmit}>
                 <Input
                   name="email"
@@ -169,10 +159,11 @@ export const SignInForm = ({
                 />
                 <Button
                   type="submit"
-                  isLoading={
-                    ["loading", "authenticated"].includes(status) || authLoading
+                  disabled={
+                    ["loading", "authenticated"].includes(status) ||
+                    authLoading ||
+                    isMagicCodeSent
                   }
-                  isDisabled={isMagicCodeSent}
                 >
                   {t("auth.emailSubmitButton.label")}
                 </Button>
@@ -187,7 +178,7 @@ export const SignInForm = ({
             <HStack>
               <AlertIcon />
               <Stack spacing={1}>
-                <Text fontWeight="semibold">{t("auth.magicLink.title")}</Text>
+                <Text fontWeight="medium">{t("auth.magicLink.title")}</Text>
                 <Text fontSize="sm">{t("auth.magicLink.description")}</Text>
               </Stack>
             </HStack>

@@ -1,6 +1,6 @@
 import { useDisclosure } from "@chakra-ui/react";
 import type { ForgedBlockDefinition } from "@typebot.io/forge-repository/definitions";
-import type { User } from "@typebot.io/schemas/features/user/schema";
+import type { User } from "@typebot.io/user/schemas";
 import { useEffect, useState } from "react";
 import { onboardingVideos } from "../data";
 
@@ -10,6 +10,7 @@ type Props = {
   user?: Pick<User, "createdAt" | "displayedInAppNotifications">;
   defaultOpenDelay?: number;
   blockDef: ForgedBlockDefinition | undefined;
+  isEnabled?: boolean;
 };
 
 export const useOnboardingDisclosure = ({
@@ -18,6 +19,7 @@ export const useOnboardingDisclosure = ({
   user,
   defaultOpenDelay,
   blockDef,
+  isEnabled = true,
 }: Props) => {
   const [isInitialized, setIsInitialized] = useState(false);
   const { isOpen, onOpen, onClose, onToggle } = useDisclosure({
@@ -33,14 +35,15 @@ export const useOnboardingDisclosure = ({
   });
 
   useEffect(() => {
-    if (isInitialized || !user?.createdAt || !key) return;
+    if (isInitialized || !user?.createdAt || !key || !isEnabled) return;
     setIsInitialized(true);
     if (
       key &&
-      new Date(user.createdAt) >=
-        (onboardingVideos[key]
-          ? onboardingVideos[key]!.deployedAt
-          : (blockDef?.onboarding?.deployedAt ?? new Date())) &&
+      (!onboardingVideos[key]?.deployedAt ||
+        new Date(user.createdAt) >=
+          (onboardingVideos[key]
+            ? onboardingVideos[key]!.deployedAt
+            : (blockDef?.onboarding?.deployedAt ?? new Date()))) &&
       user.displayedInAppNotifications?.[key] === undefined
     ) {
       if (defaultOpenDelay) {
@@ -59,7 +62,8 @@ export const useOnboardingDisclosure = ({
     onOpen,
     user?.createdAt,
     user?.displayedInAppNotifications,
+    isEnabled,
   ]);
 
-  return { isOpen, onClose, onToggle };
+  return { isOpen, onClose, onOpen };
 };

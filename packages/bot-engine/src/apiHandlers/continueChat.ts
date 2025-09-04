@@ -1,22 +1,29 @@
 import { TRPCError } from "@trpc/server";
 import { BubbleBlockType } from "@typebot.io/blocks-bubbles/constants";
+import type { Message } from "@typebot.io/chat-api/schemas";
+import { getSession } from "@typebot.io/chat-session/queries/getSession";
 import { isDefined, isNotDefined } from "@typebot.io/lib/utils";
+import {
+  deleteSessionStore,
+  getSessionStore,
+} from "@typebot.io/runtime-session-store";
 import { computeCurrentProgress } from "../computeCurrentProgress";
 import { continueBotFlow } from "../continueBotFlow";
+import { assertOriginIsAllowed } from "../helpers/assertOriginIsAllowed";
 import { filterPotentiallySensitiveLogs } from "../logs/filterPotentiallySensitiveLogs";
 import { parseDynamicTheme } from "../parseDynamicTheme";
-import { getSession } from "../queries/getSession";
 import { saveStateToDatabase } from "../saveStateToDatabase";
-import type { Message } from "../schemas/api";
 
 type Props = {
   origin: string | undefined;
+  iframeReferrerOrigin: string | undefined;
   message?: Message;
   sessionId: string;
   textBubbleContentFormat: "richText" | "markdown";
 };
 export const continueChat = async ({
   origin,
+  iframeReferrerOrigin,
   sessionId,
   message,
   textBubbleContentFormat,
@@ -30,6 +37,11 @@ export const continueChat = async ({
     });
   }
 
+  assertOriginIsAllowed(origin, {
+    allowedOrigins: session.state.allowedOrigins,
+    iframeReferrerOrigin,
+  });
+
   const isSessionExpired =
     session &&
     isDefined(session.state.expiryTimeout) &&
@@ -41,17 +53,7 @@ export const continueChat = async ({
       message: "Session expired. You need to start a new session.",
     });
 
-  let corsOrigin;
-
-  if (
-    session?.state.allowedOrigins &&
-    session.state.allowedOrigins.length > 0
-  ) {
-    if (origin && session.state.allowedOrigins.includes(origin))
-      corsOrigin = origin;
-    else corsOrigin = session.state.allowedOrigins[0];
-  }
-
+  const sessionStore = getSessionStore(sessionId);
   const {
     messages,
     input,
@@ -64,14 +66,23 @@ export const continueChat = async ({
   } = await continueBotFlow(message, {
     version: 2,
     state: session.state,
-    startTime: Date.now(),
     textBubbleContentFormat,
+    sessionStore,
   });
+
+  const dynamicTheme = parseDynamicTheme({
+    state: newSessionState,
+    sessionStore,
+  });
+  deleteSessionStore(sessionId);
 
   if (newSessionState)
     await saveStateToDatabase({
-      session: {
+      sessionId: {
+        type: "existing",
         id: session.id,
+      },
+      session: {
         state: newSessionState,
       },
       input,
@@ -99,10 +110,9 @@ export const continueChat = async ({
     messages,
     input,
     clientSideActions,
-    dynamicTheme: parseDynamicTheme(newSessionState),
+    dynamicTheme,
     logs: isPreview ? logs : logs?.filter(filterPotentiallySensitiveLogs),
     lastMessageNewFormat,
-    corsOrigin,
     progress: newSessionState.progressMetadata
       ? isEnded
         ? 100

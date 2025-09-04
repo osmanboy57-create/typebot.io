@@ -3,7 +3,7 @@ import {
   removePaymentInProgressFromStorage,
 } from "@/features/blocks/inputs/payment/helpers/paymentInProgressStorage";
 import type { BotContext } from "@/types";
-import { CorsError } from "@/utils/CorsError";
+import { getIframeReferrerOrigin } from "@/utils/getIframeReferrerOrigin";
 import { guessApiHost } from "@/utils/guessApiHost";
 import type {
   ContinueChatResponse,
@@ -11,12 +11,11 @@ import type {
   StartChatResponse,
   StartFrom,
   StartPreviewChatInput,
-} from "@typebot.io/bot-engine/schemas/api";
+} from "@typebot.io/chat-api/schemas";
 import { isNotDefined, isNotEmpty } from "@typebot.io/lib/utils";
 import ky from "ky";
 
 type Props = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   typebot: string | any;
   stripeRedirectStatus?: string;
   apiHost?: string;
@@ -68,10 +67,7 @@ export async function startChatQuery({
   }
 
   try {
-    const iframeReferrerOrigin =
-      parent !== window && isNotEmpty(document.referrer)
-        ? new URL(document.referrer).origin
-        : undefined;
+    const iframeReferrerOrigin = getIframeReferrerOrigin();
     const response = await ky.post(
       `${getApiHost(apiHost)}/api/v1/typebots/${typebotId}/startChat`,
       {
@@ -90,16 +86,6 @@ export async function startChatQuery({
         timeout: false,
       },
     );
-
-    const corsAllowOrigin = response.headers.get("access-control-allow-origin");
-
-    if (
-      iframeReferrerOrigin &&
-      corsAllowOrigin &&
-      corsAllowOrigin !== "*" &&
-      !iframeReferrerOrigin.includes(corsAllowOrigin)
-    )
-      throw new CorsError(corsAllowOrigin);
 
     return { data: await response.json<StartChatResponse>() };
   } catch (error) {
@@ -122,12 +108,16 @@ const resumeChatAfterPaymentRedirect = async ({
   removePaymentInProgressFromStorage();
 
   try {
+    const iframeReferrerOrigin = getIframeReferrerOrigin();
     const data = await ky
       .post(
         `${getApiHost(apiHost)}/api/v1/sessions/${
           paymentInProgressState.sessionId
         }/continueChat`,
         {
+          headers: {
+            "x-typebot-iframe-referrer-origin": iframeReferrerOrigin,
+          },
           json: {
             message: stripeRedirectStatus === "failed" ? "fail" : "Success",
           },

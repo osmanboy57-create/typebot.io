@@ -1,10 +1,9 @@
+import { BotContainerContext } from "@/contexts/BotContainerContext";
 import { startChatQuery } from "@/queries/startChatQuery";
-import type { BotContext, OutgoingLog } from "@/types";
+import type { BotContext } from "@/types";
 import { CorsError } from "@/utils/CorsError";
-import { setBotContainerHeight } from "@/utils/botContainerHeightSignal";
-import { setBotContainer } from "@/utils/botContainerSignal";
+import { mergeThemes } from "@/utils/dynamicTheme";
 import { injectFont } from "@/utils/injectFont";
-import { setIsMobile } from "@/utils/isMobileSignal";
 import { persist } from "@/utils/persist";
 import { setCssVariablesValue } from "@/utils/setCssVariablesValue";
 import {
@@ -20,21 +19,28 @@ import type { InputBlock } from "@typebot.io/blocks-inputs/schema";
 import type {
   StartChatResponse,
   StartFrom,
-} from "@typebot.io/bot-engine/schemas/api";
+  StartTypebot,
+} from "@typebot.io/chat-api/schemas";
 import { isDefined, isNotDefined, isNotEmpty } from "@typebot.io/lib/utils";
-import { defaultSettings } from "@typebot.io/settings/constants";
+import type { LogInSession } from "@typebot.io/logs/schemas";
+import { isTypebotVersionAtLeastV6 } from "@typebot.io/schemas/helpers/isTypebotVersionAtLeastV6";
+import {
+  defaultSettings,
+  defaultSystemMessages,
+} from "@typebot.io/settings/constants";
 import {
   defaultFontFamily,
   defaultFontType,
   defaultProgressBarPosition,
 } from "@typebot.io/theme/constants";
 import type { Font } from "@typebot.io/theme/schemas";
-import clsx from "clsx";
+import { cn } from "@typebot.io/ui/lib/cn";
+import { cx } from "@typebot.io/ui/lib/cva";
 import { HTTPError } from "ky";
-import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
+import { Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { Portal } from "solid-js/web";
-import immutableCss from "../assets/immutable.css";
-import { ConversationContainer } from "./ConversationContainer/ConversationContainer";
+import { buttonVariants } from "./Button";
+import { ChatContainer } from "./ConversationContainer/ChatContainer";
 import { ErrorMessage } from "./ErrorMessage";
 import { LiteBadge } from "./LiteBadge";
 import { ProgressBar } from "./ProgressBar";
@@ -42,11 +48,12 @@ import { CloseIcon } from "./icons/CloseIcon";
 
 export type BotProps = {
   id?: string;
-  typebot: string | any;
+  typebot: string | StartTypebot | undefined;
   isPreview?: boolean;
   resultId?: string;
   prefilledVariables?: Record<string, unknown>;
   apiHost?: string;
+  wsHost?: string;
   font?: Font;
   progressBarRef?: HTMLDivElement;
   startFrom?: StartFrom;
@@ -55,8 +62,11 @@ export type BotProps = {
   onAnswer?: (answer: { message: string; blockId: string }) => void;
   onInit?: () => void;
   onEnd?: () => void;
-  onNewLogs?: (logs: OutgoingLog[]) => void;
-  onChatStatePersisted?: (isEnabled: boolean) => void;
+  onNewLogs?: (logs: LogInSession[]) => void;
+  onChatStatePersisted?: (
+    isEnabled: boolean,
+    { typebotId }: { typebotId: string },
+  ) => void;
   onScriptExecutionSuccess?: (message: string) => void;
 };
 
@@ -108,7 +118,7 @@ export const Bot = (props: BotProps & { class?: string }) => {
         );
       }
       if (error.response.status === 400 || error.response.status === 403)
-        return setError(new Error("This bot is now closed."));
+        return setError(new Error((await error.response.json()).message));
       if (error.response.status === 404)
         return setError(new Error("The bot you're looking for doesn't exist."));
       return setError(
@@ -162,7 +172,10 @@ export const Bot = (props: BotProps & { class?: string }) => {
           new Date(initialChatInStorage.typebot.publishedAt).getTime() ===
           new Date(data.typebot.publishedAt).getTime()
         ) {
-          setInitialChatReply(initialChatInStorage);
+          setInitialChatReply({
+            ...initialChatInStorage,
+            sessionId: data.sessionId,
+          });
         } else {
           // Restart chat by resetting remembered state
           wipeExistingChatStateInStorage(data.typebot.id);
@@ -179,14 +192,14 @@ export const Bot = (props: BotProps & { class?: string }) => {
           storage,
         });
       }
-      props.onChatStatePersisted?.(true);
+      props.onChatStatePersisted?.(true, { typebotId: data.typebot.id });
     } else {
       wipeExistingChatStateInStorage(data.typebot.id);
       setInitialChatReply(data);
       if (data.input?.id && props.onNewInputBlock)
         props.onNewInputBlock(data.input);
       if (data.logs) props.onNewLogs?.(data.logs);
-      props.onChatStatePersisted?.(false);
+      props.onChatStatePersisted?.(false, { typebotId: data.typebot.id });
     }
 
     setCustomCss(data.typebot.theme.customCss ?? "");
@@ -217,8 +230,7 @@ export const Bot = (props: BotProps & { class?: string }) => {
 
   return (
     <>
-      <style>{customCss()}</style>
-      <style>{immutableCss}</style>
+      <Show when={customCss()}>{(css) => <style>{css()}</style>}</Show>
       <Show when={error()} keyed>
         {(error) => <ErrorMessage error={error} />}
       </Show>
@@ -231,17 +243,18 @@ export const Bot = (props: BotProps & { class?: string }) => {
               typebot: {
                 ...initialChatReply.typebot,
                 settings:
-                  typeof props.typebot === "string"
-                    ? initialChatReply.typebot?.settings
+                  typeof props.typebot === "string" || !props.typebot
+                    ? initialChatReply.typebot.settings
                     : props.typebot?.settings,
                 theme:
-                  typeof props.typebot === "string"
-                    ? initialChatReply.typebot?.theme
+                  typeof props.typebot === "string" || !props.typebot
+                    ? initialChatReply.typebot.theme
                     : props.typebot?.theme,
               },
             }}
             context={{
               apiHost: props.apiHost,
+              wsHost: props.wsHost,
               isPreview:
                 typeof props.typebot !== "string" || (props.isPreview ?? false),
               resultId: initialChatReply.resultId,
@@ -279,7 +292,7 @@ type BotContentProps = {
   onNewInputBlock?: (inputBlock: InputBlock) => void;
   onAnswer?: (answer: { message: string; blockId: string }) => void;
   onEnd?: () => void;
-  onNewLogs?: (logs: OutgoingLog[]) => void;
+  onNewLogs?: (logs: LogInSession[]) => void;
   onScriptExecutionSuccess?: (message: string) => void;
 };
 
@@ -291,17 +304,12 @@ const BotContent = (props: BotContentProps) => {
       key: `typebot-${props.context.typebot.id}-progressValue`,
     },
   );
-  let botContainerElement: HTMLDivElement | undefined;
+  let botContainer: HTMLDivElement | undefined;
 
-  const resizeObserver = new ResizeObserver((entries) => {
-    return setIsMobile((entries[0]?.target.clientWidth ?? 0) < 400);
-  });
-
-  onMount(() => {
-    if (!botContainerElement) return;
-    setBotContainer(botContainerElement);
-    resizeObserver.observe(botContainerElement);
-    setBotContainerHeight(`${botContainerElement.clientHeight}px`);
+  const [botContainerHeight, setBotContainerHeight] = createSignal("100%");
+  createEffect(() => {
+    if (!botContainer) return;
+    setBotContainerHeight(`${botContainer.clientHeight}px`);
   });
 
   createEffect(() => {
@@ -311,74 +319,106 @@ const BotContent = (props: BotContentProps) => {
         family: defaultFontFamily,
       },
     );
-    if (!botContainerElement) return;
-    setCssVariablesValue(
-      props.initialChatReply.typebot.theme,
-      botContainerElement,
-      props.context.isPreview,
-    );
-  });
-
-  onCleanup(() => {
-    if (!botContainerElement) return;
-    resizeObserver.unobserve(botContainerElement);
+    if (!botContainer) return;
+    setCssVariablesValue({
+      theme: mergeThemes(
+        props.initialChatReply.typebot.theme,
+        props.initialChatReply.dynamicTheme,
+      ),
+      container: botContainer,
+      isPreview: props.context.isPreview,
+      typebotVersion: isTypebotVersionAtLeastV6(
+        props.initialChatReply.typebot.version,
+      )
+        ? props.initialChatReply.typebot.version
+        : "6",
+    });
   });
 
   return (
-    <div
-      ref={botContainerElement}
-      class={clsx(
-        "relative flex w-full h-full text-base overflow-hidden flex-col justify-center items-center typebot-container",
-        props.class,
-      )}
-    >
-      <Show
-        when={
-          isDefined(progressValue()) &&
-          props.initialChatReply.typebot.theme.general?.progressBar?.isEnabled
-        }
+    <BotContainerContext.Provider value={() => botContainer}>
+      <div
+        ref={botContainer}
+        class={cx(
+          "relative flex w-full overflow-hidden h-full text-base flex-col justify-center items-center typebot-container",
+          props.class,
+        )}
+        style={{
+          "--bot-container-height": botContainerHeight(),
+        }}
       >
         <Show
           when={
-            props.progressBarRef &&
-            (props.initialChatReply.typebot.theme.general?.progressBar
-              ?.position ?? defaultProgressBarPosition) === "fixed"
+            isDefined(progressValue()) &&
+            props.initialChatReply.typebot.theme.general?.progressBar?.isEnabled
           }
-          fallback={<ProgressBar value={progressValue() as number} />}
         >
-          <Portal mount={props.progressBarRef}>
-            <ProgressBar value={progressValue() as number} />
-          </Portal>
+          <Show
+            when={
+              props.progressBarRef &&
+              (props.initialChatReply.typebot.theme.general?.progressBar
+                ?.position ?? defaultProgressBarPosition) === "fixed"
+            }
+            fallback={<ProgressBar value={progressValue() as number} />}
+          >
+            <Portal mount={props.progressBarRef}>
+              <ProgressBar value={progressValue() as number} />
+            </Portal>
+          </Show>
         </Show>
-      </Show>
-      <ConversationContainer
-        context={props.context}
-        initialChatReply={props.initialChatReply}
-        onNewInputBlock={props.onNewInputBlock}
-        onAnswer={props.onAnswer}
-        onEnd={props.onEnd}
-        onNewLogs={props.onNewLogs}
-        onProgressUpdate={setProgressValue}
-        onScriptExecutionSuccess={props.onScriptExecutionSuccess}
-      />
-      <Show
-        when={
-          props.initialChatReply.typebot.settings.general?.isBrandingEnabled
-        }
-      >
-        <LiteBadge botContainer={botContainerElement} />
-      </Show>
-      <Toaster toaster={toaster}>
-        {(toast) => (
-          <Toast.Root>
-            <Toast.Title>{toast().title}</Toast.Title>
-            <Toast.Description>{toast().description}</Toast.Description>
-            <Toast.CloseTrigger class="absolute right-2 top-2">
-              <CloseIcon class="w-4 h-4" />
-            </Toast.CloseTrigger>
-          </Toast.Root>
-        )}
-      </Toaster>
-    </div>
+        <ChatContainer
+          context={props.context}
+          initialChatReply={props.initialChatReply}
+          onNewInputBlock={props.onNewInputBlock}
+          onAnswer={props.onAnswer}
+          onEnd={props.onEnd}
+          onNewLogs={props.onNewLogs}
+          onProgressUpdate={setProgressValue}
+          onScriptExecutionSuccess={props.onScriptExecutionSuccess}
+        />
+        <Show
+          when={
+            props.initialChatReply.typebot.settings.general?.isBrandingEnabled
+          }
+        >
+          <LiteBadge botContainer={botContainer} />
+        </Show>
+        <Toaster toaster={toaster} class="w-full">
+          {(toast) => (
+            <Toast.Root class="flex flex-col pl-4 py-4 pr-8 gap-2 max-w-[350px] rounded-chat text-input-text border-input border-input-border bg-input-bg shadow-input data-[state=open]:animate-fade-in-from-bottom data-[state=closed]:animate-fade-out-from-bottom">
+              <Toast.Title class="font-semibold">{toast().title}</Toast.Title>
+              <Toast.Description class="text-sm">
+                {toast().description}
+              </Toast.Description>
+              <Toast.CloseTrigger
+                class={cn(
+                  "absolute right-2 top-2",
+                  buttonVariants({ variant: "secondary", size: "icon" }),
+                )}
+              >
+                <CloseIcon class="w-4 h-4" />
+              </Toast.CloseTrigger>
+              <Show when={toast().meta?.link as string}>
+                {(link) => (
+                  <a
+                    href={link()}
+                    target="_blank"
+                    class={cn(
+                      buttonVariants({ variant: "primary", size: "sm" }),
+                      "no-underline",
+                    )}
+                    rel="noreferrer"
+                  >
+                    {props.initialChatReply.typebot.settings.general
+                      ?.systemMessages?.popupBlockedButtonLabel ??
+                      defaultSystemMessages.popupBlockedButtonLabel}
+                  </a>
+                )}
+              </Show>
+            </Toast.Root>
+          )}
+        </Toaster>
+      </div>
+    </BotContainerContext.Provider>
   );
 };

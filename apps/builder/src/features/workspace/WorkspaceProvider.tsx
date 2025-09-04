@@ -1,13 +1,14 @@
-import { useToast } from "@/hooks/useToast";
-import { trpc } from "@/lib/trpc";
+import { queryClient, trpc } from "@/lib/queryClient";
+import { toast } from "@/lib/toast";
+import { useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { byId } from "@typebot.io/lib/utils";
-import { WorkspaceRole } from "@typebot.io/prisma/enum";
 import type { Workspace } from "@typebot.io/workspaces/schemas";
 import { useRouter } from "next/router";
 import type { ReactNode } from "react";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { useUser } from "../account/hooks/useUser";
 import { useTypebot } from "../editor/providers/TypebotProvider";
+import { useUser } from "../user/hooks/useUser";
 import { parseNewName } from "./helpers/parseNewName";
 import { setWorkspaceIdInLocalStorage } from "./helpers/setWorkspaceIdInLocalStorage";
 
@@ -23,13 +24,18 @@ export type WorkspaceInApp = Omit<
   | "isQuarantined"
 >;
 
+type WorkspaceUpdateProps = {
+  icon?: string;
+  name?: string;
+};
+
 const workspaceContext = createContext<{
   workspaces: Pick<Workspace, "id" | "name" | "icon" | "plan">[];
   workspace?: WorkspaceInApp;
-  currentRole?: WorkspaceRole;
+  currentUserMode?: "read" | "write" | "guest";
   switchWorkspace: (workspaceId: string) => void;
   createWorkspace: (name?: string) => Promise<void>;
-  updateWorkspace: (updates: { icon?: string; name?: string }) => void;
+  updateWorkspace: (updates: WorkspaceUpdateProps) => void;
   deleteCurrentWorkspace: () => Promise<void>;
   //@ts-ignore
 }>({});
@@ -56,60 +62,61 @@ export const WorkspaceProvider = ({
 
   const { typebot } = useTypebot();
 
-  const trpcContext = trpc.useContext();
-
-  const { data: workspacesData } = trpc.workspace.listWorkspaces.useQuery(
-    undefined,
-    {
+  const { data: workspacesData } = useQuery(
+    trpc.workspace.listWorkspaces.queryOptions(undefined, {
       enabled: !!user,
-    },
+    }),
   );
   const workspaces = useMemo(
     () => workspacesData?.workspaces ?? [],
     [workspacesData?.workspaces],
   );
 
-  const { data: workspaceData } = trpc.workspace.getWorkspace.useQuery(
-    { workspaceId: workspaceId as string },
-    { enabled: !!workspaceId },
-  );
-
-  const { data: membersData } = trpc.workspace.listMembersInWorkspace.useQuery(
-    { workspaceId: workspaceId as string },
-    { enabled: !!workspaceId },
+  const { data: workspaceData } = useQuery(
+    trpc.workspace.getWorkspace.queryOptions(
+      { workspaceId: workspaceId as string },
+      { enabled: !!workspaceId },
+    ),
   );
 
   const workspace = workspaceData?.workspace;
-  const members = membersData?.members;
 
-  const { showToast } = useToast();
+  const createWorkspaceMutation = useMutation(
+    trpc.workspace.createWorkspace.mutationOptions({
+      onError: (error) => toast({ description: error.message }),
+      onSuccess: async () => {
+        queryClient.invalidateQueries({
+          queryKey: trpc.workspace.listWorkspaces.queryKey(),
+        });
+      },
+    }),
+  );
 
-  const createWorkspaceMutation = trpc.workspace.createWorkspace.useMutation({
-    onError: (error) => showToast({ description: error.message }),
-    onSuccess: async () => {
-      trpcContext.workspace.listWorkspaces.invalidate();
-    },
-  });
+  const updateWorkspaceMutation = useMutation(
+    trpc.workspace.updateWorkspace.mutationOptions({
+      onError: (error) => toast({ description: error.message }),
+      onSuccess: async () => {
+        if (!workspaceId) return;
+        queryClient.invalidateQueries({
+          queryKey: trpc.workspace.getWorkspace.queryKey({
+            workspaceId,
+          }),
+        });
+      },
+    }),
+  );
 
-  const updateWorkspaceMutation = trpc.workspace.updateWorkspace.useMutation({
-    onError: (error) => showToast({ description: error.message }),
-    onSuccess: async () => {
-      trpcContext.workspace.getWorkspace.invalidate();
-    },
-  });
-
-  const deleteWorkspaceMutation = trpc.workspace.deleteWorkspace.useMutation({
-    onError: (error) => showToast({ description: error.message }),
-    onSuccess: async () => {
-      trpcContext.workspace.listWorkspaces.invalidate();
-      setWorkspaceId(undefined);
-    },
-  });
-
-  const currentRole = members?.find(
-    (member) =>
-      member.user.email === user?.email && member.workspaceId === workspaceId,
-  )?.role;
+  const deleteWorkspaceMutation = useMutation(
+    trpc.workspace.deleteWorkspace.mutationOptions({
+      onError: (error) => toast({ description: error.message }),
+      onSuccess: async () => {
+        queryClient.invalidateQueries({
+          queryKey: trpc.workspace.listWorkspaces.queryKey(),
+        });
+        setWorkspaceId(undefined);
+      },
+    }),
+  );
 
   useEffect(() => {
     if (
@@ -117,10 +124,18 @@ export const WorkspaceProvider = ({
       !isRouterReady ||
       !workspaces ||
       workspaces.length === 0 ||
-      workspaceId ||
       (typebotId && !typebot?.workspaceId)
     )
       return;
+    if (workspaceId) {
+      const currentWorkspace = workspaces.find(byId(workspaceId));
+      // Workspace was just deleted
+      if (!currentWorkspace) {
+        setWorkspaceIdInLocalStorage(workspaces[0].id);
+        setWorkspaceId(workspaces[0].id);
+      }
+      return;
+    }
     const lastWorspaceId =
       typebot?.workspaceId ??
       query.workspaceId?.toString() ??
@@ -128,15 +143,13 @@ export const WorkspaceProvider = ({
 
     const defaultWorkspaceId = lastWorspaceId
       ? workspaces.find(byId(lastWorspaceId))?.id
-      : members?.find((member) => member.role === WorkspaceRole.ADMIN)
-          ?.workspaceId;
+      : workspaces[0].id;
 
     const newWorkspaceId = defaultWorkspaceId ?? workspaces[0].id;
     setWorkspaceIdInLocalStorage(newWorkspaceId);
     setWorkspaceId(newWorkspaceId);
   }, [
     isRouterReady,
-    members,
     pathname,
     query.workspaceId,
     typebot?.workspaceId,
@@ -172,7 +185,7 @@ export const WorkspaceProvider = ({
     setWorkspaceId(workspace.id);
   };
 
-  const updateWorkspace = (updates: { icon?: string; name?: string }) => {
+  const updateWorkspace = (updates: WorkspaceUpdateProps) => {
     if (!workspaceId) return;
     updateWorkspaceMutation.mutate({
       workspaceId,
@@ -190,7 +203,7 @@ export const WorkspaceProvider = ({
       value={{
         workspaces,
         workspace,
-        currentRole,
+        currentUserMode: workspaceData?.currentUserMode,
         switchWorkspace,
         createWorkspace,
         updateWorkspace,

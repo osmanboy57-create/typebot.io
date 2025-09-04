@@ -1,39 +1,64 @@
 import { isReadWorkspaceFobidden } from "@/features/workspace/helpers/isReadWorkspaceFobidden";
 import { authenticatedProcedure } from "@/helpers/server/trpc";
+import { ClientToastError } from "@/lib/ClientToastError";
 import { TRPCError } from "@trpc/server";
+import { decryptAndRefreshCredentialsData } from "@typebot.io/credentials/decryptAndRefreshCredentials";
+import type { Credentials } from "@typebot.io/credentials/schemas";
 import { forgedBlockIds } from "@typebot.io/forge-repository/constants";
 import { forgedBlocks } from "@typebot.io/forge-repository/definitions";
-import { decrypt } from "@typebot.io/lib/api/encryption/decrypt";
 import prisma from "@typebot.io/prisma";
 import { z } from "@typebot.io/zod";
 import { getFetchers } from "../helpers/getFetchers";
 
+const baseInputSchema = z.object({
+  integrationId: z.enum(forgedBlockIds),
+  fetcherId: z.string(),
+  options: z.any(),
+});
+
 export const fetchSelectItems = authenticatedProcedure
   .input(
-    z.object({
-      integrationId: z.enum(forgedBlockIds),
-      fetcherId: z.string(),
-      options: z.any(),
-      workspaceId: z.string(),
-    }),
+    z.discriminatedUnion("scope", [
+      z
+        .object({
+          scope: z.literal("workspace"),
+          workspaceId: z.string(),
+        })
+        .merge(baseInputSchema),
+      z
+        .object({
+          scope: z.literal("user"),
+        })
+        .merge(baseInputSchema),
+    ]),
   )
-  .query(
-    async ({
-      input: { workspaceId, integrationId, fetcherId, options },
-      ctx: { user },
-    }) => {
+  .query(async ({ input, ctx: { user } }) => {
+    let credentials;
+    if (input.scope === "user") {
+      credentials = await prisma.userCredentials.findFirst({
+        where: {
+          userId: user.id,
+          id: input.options.credentialsId,
+        },
+        select: {
+          id: true,
+          data: true,
+          iv: true,
+        },
+      });
+    } else {
       const workspace = await prisma.workspace.findFirst({
-        where: { id: workspaceId },
+        where: { id: input.workspaceId },
         select: {
           members: {
             select: {
               userId: true,
             },
           },
-          credentials: options.credentialsId
+          credentials: input.options.credentialsId
             ? {
                 where: {
-                  id: options.credentialsId,
+                  id: input.options.credentialsId,
                 },
                 select: {
                   id: true,
@@ -51,26 +76,35 @@ export const fetchSelectItems = authenticatedProcedure
           message: "No workspace found",
         });
 
-      const credentials = workspace.credentials?.at(0);
+      credentials = workspace.credentials?.at(0);
+    }
 
-      const credentialsData = credentials
-        ? await decrypt(credentials.data, credentials.iv)
-        : undefined;
+    const blockDef = forgedBlocks[input.integrationId];
 
-      const blockDef = forgedBlocks[integrationId];
+    const credentialsData = credentials
+      ? await decryptAndRefreshCredentialsData(
+          {
+            ...credentials,
+            type: input.integrationId as Credentials["type"],
+          },
+          blockDef.auth && "defaultClientEnvKeys" in blockDef.auth
+            ? blockDef.auth.defaultClientEnvKeys
+            : undefined,
+        )
+      : undefined;
 
-      const fetcher = getFetchers(blockDef).find(
-        (fetcher) => fetcher.id === fetcherId,
-      );
+    const fetcher = getFetchers(blockDef).find(
+      (fetcher) => fetcher.id === input.fetcherId,
+    );
 
-      if (!fetcher) return { items: [] };
+    if (!fetcher) return { items: [] };
 
-      return {
-        items: await fetcher.fetch({
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          credentials: credentialsData as any,
-          options,
-        }),
-      };
-    },
-  );
+    const { data, error } = await fetcher.fetch({
+      credentials: credentialsData as any,
+      options: input.options,
+    });
+
+    if (error) throw new ClientToastError(error);
+
+    return { items: data };
+  });

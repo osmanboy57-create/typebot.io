@@ -1,8 +1,17 @@
 import { BubbleBlockType } from "@typebot.io/blocks-bubbles/constants";
+import type {
+  Message,
+  StartFrom,
+  StartTypebot,
+} from "@typebot.io/chat-api/schemas";
+import { restartSession } from "@typebot.io/chat-session/queries/restartSession";
+import { createId } from "@typebot.io/lib/createId";
+import {
+  deleteSessionStore,
+  getSessionStore,
+} from "@typebot.io/runtime-session-store";
 import { computeCurrentProgress } from "../computeCurrentProgress";
-import { restartSession } from "../queries/restartSession";
 import { saveStateToDatabase } from "../saveStateToDatabase";
-import type { Message, StartFrom, StartTypebot } from "../schemas/api";
 import { startSession } from "../startSession";
 
 type Props = {
@@ -27,9 +36,11 @@ export const startChatPreview = async ({
   typebot: startTypebot,
   userId,
   prefilledVariables,
-  sessionId,
+  sessionId: sessionIdProp,
   textBubbleContentFormat,
 }: Props) => {
+  const sessionId = sessionIdProp ?? createId();
+  const sessionStore = getSessionStore(sessionId);
   const {
     typebot,
     messages,
@@ -42,6 +53,7 @@ export const startChatPreview = async ({
     setVariableHistory,
   } = await startSession({
     version: 2,
+    sessionStore,
     startParams: {
       type: "preview",
       isOnlyRegistering,
@@ -51,11 +63,11 @@ export const startChatPreview = async ({
       typebot: startTypebot,
       userId,
       prefilledVariables,
-      sessionId,
       textBubbleContentFormat,
       message,
     },
   });
+  deleteSessionStore(sessionId);
 
   const session = isOnlyRegistering
     ? await restartSession({
@@ -64,6 +76,10 @@ export const startChatPreview = async ({
     : await saveStateToDatabase({
         session: {
           state: newSessionState,
+        },
+        sessionId: {
+          type: "new",
+          id: sessionId,
         },
         input,
         logs,
@@ -76,7 +92,6 @@ export const startChatPreview = async ({
             (message.type === BubbleBlockType.EMBED &&
               message.content.waitForEvent?.isEnabled),
         ),
-        initialSessionId: sessionId,
       });
 
   const isEnded =
@@ -89,6 +104,7 @@ export const startChatPreview = async ({
     sessionId: session.id,
     typebot: {
       id: typebot.id,
+      version: typebot.version,
       theme: typebot.theme,
       settings: typebot.settings,
     },

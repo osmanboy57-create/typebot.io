@@ -1,3 +1,4 @@
+import { ButtonLink } from "@/components/ButtonLink";
 import { EditableEmojiOrImageIcon } from "@/components/EditableEmojiOrImageIcon";
 import { SupportBubble } from "@/components/SupportBubble";
 import {
@@ -13,15 +14,14 @@ import { ShareTypebotButton } from "@/features/share/components/ShareTypebotButt
 import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
 import { isCloudProdInstance } from "@/helpers/isCloudProdInstance";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { useOpenControls } from "@/hooks/useOpenControls";
+import { useRightPanel } from "@/hooks/useRightPanel";
 import {
-  Button,
   Flex,
   HStack,
-  IconButton,
   Spinner,
   type StackProps,
   Text,
-  Tooltip,
   chakra,
   useColorModeValue,
   useDisclosure,
@@ -29,12 +29,14 @@ import {
 import { useTranslate } from "@tolgee/react";
 import { isDefined, isNotDefined } from "@typebot.io/lib/utils";
 import { Plan } from "@typebot.io/prisma/enum";
-import Link from "next/link";
+import { Button } from "@typebot.io/ui/components/Button";
+import { Tooltip } from "@typebot.io/ui/components/Tooltip";
+import { LayoutBottomIcon } from "@typebot.io/ui/icons/LayoutBottomIcon";
 import { useRouter } from "next/router";
 import React, { useState } from "react";
 import { useDebouncedCallback } from "use-debounce";
 import { headerHeight } from "../constants";
-import { RightPanel, useEditor } from "../providers/EditorProvider";
+import { useEditor } from "../providers/EditorProvider";
 import { useTypebot } from "../providers/TypebotProvider";
 import { EditableTypebotName } from "./EditableTypebotName";
 import { GuestTypebotHeader } from "./UnauthenticatedTypebotHeader";
@@ -42,9 +44,8 @@ import { GuestTypebotHeader } from "./UnauthenticatedTypebotHeader";
 export const TypebotHeader = () => {
   const { typebot, publishedTypebot, currentUserMode } = useTypebot();
   const { workspace } = useWorkspace();
-
   const { isOpen, onOpen } = useDisclosure();
-  const headerBgColor = useColorModeValue("white", "gray.900");
+  const headerBgColor = useColorModeValue("white", "gray.950");
 
   const handleHelpClick = () => {
     isCloudProdInstance() && workspace?.plan && workspace.plan !== Plan.FREE
@@ -60,7 +61,6 @@ export const TypebotHeader = () => {
       justify="center"
       align="center"
       h={`${headerHeight}px`}
-      zIndex={1}
       pos="relative"
       bgColor={headerBgColor}
       flexShrink={0}
@@ -100,19 +100,22 @@ const LeftElements = ({
     isSavingLoading,
   } = useTypebot();
 
-  const [isRedoShortcutTooltipOpen, setRedoShortcutTooltipOpen] =
-    useState(false);
-
-  const [isUndoShortcutTooltipOpen, setUndoShortcutTooltipOpen] =
-    useState(false);
-
-  const hideUndoShortcutTooltipLater = useDebouncedCallback(() => {
-    setUndoShortcutTooltipOpen(false);
-  }, 1000);
-
-  const hideRedoShortcutTooltipLater = useDebouncedCallback(() => {
-    setRedoShortcutTooltipOpen(false);
-  }, 1000);
+  const [isUndoExecuted, setIsUndoExecuted] = useState(false);
+  const [isRedoExecuted, setIsRedoExecuted] = useState(false);
+  const undoOpenControls = useOpenControls({
+    onClose: () => {
+      setTimeout(() => {
+        setIsUndoExecuted(false);
+      }, 150);
+    },
+  });
+  const redoOpenControls = useOpenControls({
+    onClose: () => {
+      setTimeout(() => {
+        setIsRedoExecuted(false);
+      }, 150);
+    },
+  });
 
   const handleNameSubmit = (name: string) =>
     updateTypebot({ updates: { name } });
@@ -120,30 +123,45 @@ const LeftElements = ({
   const handleChangeIcon = (icon: string) =>
     updateTypebot({ updates: { icon } });
 
+  const handleUndoClick = () => {
+    if (!canUndo) return;
+    setIsUndoExecuted(true);
+    undo();
+  };
+
+  const handleRedoClick = () => {
+    if (!canRedo) return;
+    setIsRedoExecuted(true);
+    redo();
+  };
+
+  const debouncedCloseUndoTooltip = useDebouncedCallback(() => {
+    undoOpenControls.onClose();
+  }, 1000);
+  const debouncedCloseRedoTooltip = useDebouncedCallback(() => {
+    redoOpenControls.onClose();
+  }, 1000);
+
   useKeyboardShortcuts({
     undo: () => {
       if (!canUndo) return;
-      hideUndoShortcutTooltipLater.flush();
-      setUndoShortcutTooltipOpen(true);
-      hideUndoShortcutTooltipLater();
-      undo();
+      undoOpenControls.onOpen();
+      handleUndoClick();
+      debouncedCloseUndoTooltip();
     },
     redo: () => {
       if (!canRedo) return;
-      hideUndoShortcutTooltipLater.flush();
-      setRedoShortcutTooltipOpen(true);
-      hideRedoShortcutTooltipLater();
-      redo();
+      redoOpenControls.onOpen();
+      handleRedoClick();
+      debouncedCloseRedoTooltip();
     },
   });
 
   return (
     <HStack justify="center" align="center" spacing="6" {...props}>
       <HStack alignItems="center" spacing={3}>
-        <IconButton
-          as={Link}
+        <ButtonLink
           aria-label="Navigate back"
-          icon={<ChevronLeftIcon fontSize={25} />}
           href={{
             pathname: router.query.parentId
               ? "/typebots/[typebotId]/edit"
@@ -160,8 +178,12 @@ const LeftElements = ({
                 : (router.query.parentId ?? []),
             },
           }}
-          size="sm"
-        />
+          size="icon"
+          variant="secondary"
+          className="size-8"
+        >
+          <ChevronLeftIcon />
+        </ButtonLink>
         <HStack spacing={1}>
           {typebot && (
             <EditableEmojiOrImageIcon
@@ -172,6 +194,7 @@ const LeftElements = ({
               }}
               icon={typebot?.icon}
               onChangeIcon={handleChangeIcon}
+              defaultIcon={LayoutBottomIcon}
             />
           )}
           (
@@ -185,51 +208,45 @@ const LeftElements = ({
 
         {currentUserMode === "write" && (
           <HStack>
-            <Tooltip
-              label={
-                isUndoShortcutTooltipOpen
-                  ? t("editor.header.undo.tooltip.label")
-                  : t("editor.header.undoButton.label")
-              }
-              isOpen={isUndoShortcutTooltipOpen ? true : undefined}
-              hasArrow={isUndoShortcutTooltipOpen}
-            >
-              <IconButton
-                display={["none", "flex"]}
-                icon={<UndoIcon />}
-                size="sm"
+            <Tooltip.Root {...undoOpenControls} keepOpenOnClick>
+              <Tooltip.TriggerButton
+                size="icon"
+                variant="secondary"
+                className="size-8 hidden sm:flex"
                 aria-label={t("editor.header.undoButton.label")}
                 onClick={undo}
-                isDisabled={!canUndo}
-              />
-            </Tooltip>
-
-            <Tooltip
-              label={
-                isRedoShortcutTooltipOpen
+                disabled={!canUndo}
+              >
+                <UndoIcon />
+              </Tooltip.TriggerButton>
+              <Tooltip.Popup>
+                {isUndoExecuted
                   ? t("editor.header.undo.tooltip.label")
-                  : t("editor.header.redoButton.label")
-              }
-              isOpen={isRedoShortcutTooltipOpen ? true : undefined}
-              hasArrow={isRedoShortcutTooltipOpen}
-            >
-              <IconButton
-                display={["none", "flex"]}
-                icon={<RedoIcon />}
-                size="sm"
+                  : t("editor.header.undoButton.label")}
+              </Tooltip.Popup>
+            </Tooltip.Root>
+
+            <Tooltip.Root {...redoOpenControls} keepOpenOnClick>
+              <Tooltip.TriggerButton
+                size="icon"
+                variant="secondary"
+                className="size-8 hidden sm:flex"
                 aria-label={t("editor.header.redoButton.label")}
                 onClick={redo}
-                isDisabled={!canRedo}
-              />
-            </Tooltip>
+                disabled={!canRedo}
+              >
+                <RedoIcon />
+              </Tooltip.TriggerButton>
+              <Tooltip.Popup>
+                {isRedoExecuted
+                  ? t("editor.header.undo.tooltip.label")
+                  : t("editor.header.redoButton.label")}
+              </Tooltip.Popup>
+            </Tooltip.Root>
           </HStack>
         )}
-        <Button
-          leftIcon={<BuoyIcon />}
-          onClick={onHelpClick}
-          size="sm"
-          iconSpacing={{ base: 0, xl: 2 }}
-        >
+        <Button onClick={onHelpClick} variant="secondary" size="sm">
+          <BuoyIcon />
           <chakra.span display={{ base: "none", xl: "inline" }}>
             {t("editor.header.helpButton.label")}
           </chakra.span>
@@ -254,18 +271,13 @@ const RightElements = ({
   const router = useRouter();
   const { t } = useTranslate();
   const { typebot, currentUserMode, save, isSavingLoading } = useTypebot();
-  const {
-    setRightPanel,
-    rightPanel,
-    setStartPreviewAtGroup,
-    setStartPreviewAtEvent,
-  } = useEditor();
+  const { setStartPreviewFrom } = useEditor();
+  const [rightPanel, setRightPanel] = useRightPanel();
 
   const handlePreviewClick = async () => {
-    setStartPreviewAtGroup(undefined);
-    setStartPreviewAtEvent(undefined);
+    setStartPreviewFrom(undefined);
     await save();
-    setRightPanel(RightPanel.PREVIEW);
+    setRightPanel("preview");
   };
 
   return (
@@ -278,31 +290,29 @@ const RightElements = ({
       <Flex pos="relative">
         <ShareTypebotButton isLoading={isNotDefined(typebot)} />
       </Flex>
-      {router.pathname.includes("/edit") &&
-        rightPanel !== RightPanel.PREVIEW && (
-          <Button
-            colorScheme="gray"
-            onClick={handlePreviewClick}
-            isLoading={isNotDefined(typebot) || isSavingLoading}
-            leftIcon={<PlayIcon />}
-            size="sm"
-            iconSpacing={{ base: 0, xl: 2 }}
-          >
-            <chakra.span display={{ base: "none", xl: "inline" }}>
-              {t("editor.header.previewButton.label")}
-            </chakra.span>
-          </Button>
-        )}
-      {currentUserMode === "guest" && (
+      {router.pathname.includes("/edit") && rightPanel !== "preview" && (
         <Button
-          as={Link}
+          variant="secondary"
+          size="sm"
+          onClick={handlePreviewClick}
+          disabled={isNotDefined(typebot) || isSavingLoading}
+        >
+          <PlayIcon />
+          <chakra.span display={{ base: "none", xl: "inline" }}>
+            {t("editor.header.previewButton.label")}
+          </chakra.span>
+        </Button>
+      )}
+      {currentUserMode === "guest" && (
+        <ButtonLink
           href={`/typebots/${typebot?.id}/duplicate`}
-          leftIcon={<CopyIcon />}
-          isLoading={isNotDefined(typebot)}
+          disabled={isNotDefined(typebot)}
+          variant="secondary"
           size="sm"
         >
+          <CopyIcon />
           Duplicate
-        </Button>
+        </ButtonLink>
       )}
       {currentUserMode === "write" && <PublishButton size="sm" />}
     </HStack>
@@ -322,52 +332,42 @@ const TypebotNav = ({
 
   return (
     <HStack {...stackProps}>
-      <Button
-        as={Link}
+      <ButtonLink
         href={`/typebots/${typebotId}/edit`}
-        colorScheme={router.pathname.includes("/edit") ? "blue" : "gray"}
         variant={router.pathname.includes("/edit") ? "outline" : "ghost"}
         size="sm"
       >
         {t("editor.header.flowButton.label")}
-      </Button>
-      <Button
-        as={Link}
+      </ButtonLink>
+      <ButtonLink
         href={`/typebots/${typebotId}/theme`}
-        colorScheme={router.pathname.endsWith("theme") ? "blue" : "gray"}
         variant={router.pathname.endsWith("theme") ? "outline" : "ghost"}
         size="sm"
       >
         {t("editor.header.themeButton.label")}
-      </Button>
-      <Button
-        as={Link}
+      </ButtonLink>
+      <ButtonLink
         href={`/typebots/${typebotId}/settings`}
-        colorScheme={router.pathname.endsWith("settings") ? "blue" : "gray"}
         variant={router.pathname.endsWith("settings") ? "outline" : "ghost"}
         size="sm"
       >
         {t("editor.header.settingsButton.label")}
-      </Button>
-      <Button
-        as={Link}
+      </ButtonLink>
+      <ButtonLink
         href={`/typebots/${typebotId}/share`}
-        colorScheme={router.pathname.endsWith("share") ? "blue" : "gray"}
         variant={router.pathname.endsWith("share") ? "outline" : "ghost"}
         size="sm"
       >
         {t("share.button.label")}
-      </Button>
+      </ButtonLink>
       {isResultsDisplayed && (
-        <Button
-          as={Link}
+        <ButtonLink
           href={`/typebots/${typebotId}/results`}
-          colorScheme={router.pathname.includes("results") ? "blue" : "gray"}
           variant={router.pathname.includes("results") ? "outline" : "ghost"}
           size="sm"
         >
           {t("editor.header.resultsButton.label")}
-        </Button>
+        </ButtonLink>
       )}
     </HStack>
   );

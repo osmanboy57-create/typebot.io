@@ -1,9 +1,8 @@
 import { TypingBubble } from "@/components/TypingBubble";
-import { isMobile } from "@/utils/isMobileSignal";
 import type { TextBubbleBlock } from "@typebot.io/blocks-bubbles/text/schema";
-import { computeTypingDuration } from "@typebot.io/bot-engine/computeTypingDuration";
+import { computeTypingDuration } from "@typebot.io/settings/computeTypingDuration";
 import type { Settings } from "@typebot.io/settings/schemas";
-import clsx from "clsx";
+import { cx } from "@typebot.io/ui/lib/cva";
 import { For, createSignal, onCleanup, onMount } from "solid-js";
 import { computePlainText } from "../helpers/convertRichTextToPlainText";
 import { PlateElement } from "./plate/PlateBlock";
@@ -54,7 +53,7 @@ export const TextBubble = (props: Props) => {
 
   return (
     <div
-      class={clsx(
+      class={cx(
         "flex flex-col",
         props.onTransitionEnd ? "animate-fade-in" : undefined,
       )}
@@ -73,13 +72,10 @@ export const TextBubble = (props: Props) => {
             {isTyping() && <TypingBubble />}
           </div>
           <div
-            class={clsx(
+            class={cx(
               "overflow-hidden text-fade-in mx-4 my-2 whitespace-pre-wrap slate-html-container relative text-ellipsis",
-              isTyping() ? "opacity-0" : "opacity-100",
+              isTyping() ? "opacity-0 h-4 @xs:h-5" : "opacity-100 h-full",
             )}
-            style={{
-              height: isTyping() ? (isMobile() ? "16px" : "20px") : "100%",
-            }}
           >
             <For each={props.content?.richText}>
               {(element) => <PlateElement element={element} />}

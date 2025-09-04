@@ -1,9 +1,10 @@
-import { stringifyError } from "@typebot.io/lib/stringifyError";
+import { env } from "@typebot.io/env";
+import { parseUnknownError } from "@typebot.io/lib/parseUnknownError";
 import { isDefined } from "@typebot.io/lib/utils";
+import type { SessionStore } from "@typebot.io/runtime-session-store";
 import { Reference } from "isolated-vm";
 import { parseTransferrableValue } from "./codeRunners";
 import { extractVariablesFromText } from "./extractVariablesFromText";
-import { getOrCreateIsolate } from "./getOrCreateIsolate";
 import { parseGuessedValueType } from "./parseGuessedValueType";
 import { parseVariables } from "./parseVariables";
 import type { Variable } from "./schemas";
@@ -13,17 +14,21 @@ const defaultTimeout = 10 * 1000;
 type Props = {
   variables: Variable[];
   body: string;
+  sessionStore: SessionStore;
   args?: Record<string, unknown>;
 };
 
 export const executeFunction = async ({
   variables,
   body,
+  sessionStore,
   args: initialArgs,
 }: Props) => {
-  const parsedBody = parseVariables(variables, {
+  const parsedBody = parseVariables(body, {
     fieldToParse: "id",
-  })(body);
+    variables,
+    sessionStore,
+  });
 
   const args = (
     extractVariablesFromText(variables)(body).map((variable) => ({
@@ -42,8 +47,7 @@ export const executeFunction = async ({
     variableUpdates.set(key, value);
   };
 
-  const isolate = getOrCreateIsolate();
-  const context = isolate.createContextSync();
+  const context = sessionStore.getOrCreateIsolate().createContextSync();
   const jail = context.global;
   jail.setSync("global", jail.derefInto());
   context.evalClosure(
@@ -76,6 +80,7 @@ export const executeFunction = async ({
 
   try {
     const output: unknown = await run(parsedBody);
+    context.release();
     return {
       output,
       newVariables: Array.from(variableUpdates.entries())
@@ -91,10 +96,16 @@ export const executeFunction = async ({
         .filter(isDefined),
     };
   } catch (e) {
-    console.log("Error while executing script");
-    console.error(e);
+    context.release();
+    if (env.NODE_ENV === "development") {
+      console.log("Error while executing the function");
+      console.error(e);
+    }
 
-    const error = stringifyError(e);
+    const error = await parseUnknownError({
+      err: e,
+      context: "While executing function",
+    });
 
     return {
       error,

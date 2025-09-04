@@ -1,5 +1,4 @@
 import {
-  Button,
   HStack,
   Image,
   SimpleGrid,
@@ -8,6 +7,7 @@ import {
   useColorModeValue,
 } from "@chakra-ui/react";
 import { useTranslate } from "@tolgee/react";
+import { Button } from "@typebot.io/ui/components/Button";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ColorPicker } from "../ColorPicker";
 import { TextInput } from "../inputs";
@@ -113,14 +113,19 @@ export const IconPicker = ({ onIconSelected }: Props) => {
           onChange={searchIcon}
           withVariableButton={false}
           debounceTimeout={300}
+          width="full"
         />
-        <ColorPicker value={selectedColor} onColorChange={updateColor} />
+        <ColorPicker
+          value={selectedColor}
+          onColorChange={updateColor}
+          side="right"
+        />
       </HStack>
 
       <Stack overflowY="auto" maxH="350px" ref={scrollContainer} spacing={4}>
         {recentIconNames.length > 0 && (
           <Stack>
-            <Text fontSize="xs" color="gray.400" fontWeight="semibold" pl="2">
+            <Text fontSize="xs" color="gray.400" fontWeight="medium" pl="2">
               RECENT
             </Text>
             <SimpleGrid
@@ -131,12 +136,9 @@ export const IconPicker = ({ onIconSelected }: Props) => {
             >
               {recentIconNames.map((iconName) => (
                 <Button
-                  size="sm"
-                  variant={"ghost"}
-                  fontSize="xl"
-                  w="38px"
-                  h="38px"
-                  p="2"
+                  size="icon"
+                  variant="ghost"
+                  className="text-xl w-8 h-8 p-1.5"
                   key={iconName}
                   onClick={() => selectIcon(iconName)}
                 >
@@ -148,7 +150,7 @@ export const IconPicker = ({ onIconSelected }: Props) => {
         )}
         <Stack>
           {recentIconNames.length > 0 && (
-            <Text fontSize="xs" color="gray.400" fontWeight="semibold" pl="2">
+            <Text fontSize="xs" color="gray.400" fontWeight="medium" pl="2">
               ICONS
             </Text>
           )}
@@ -160,12 +162,9 @@ export const IconPicker = ({ onIconSelected }: Props) => {
           >
             {displayedIconNames.map((iconName) => (
               <Button
-                size="sm"
-                variant={"ghost"}
-                fontSize="xl"
-                w="38px"
-                h="38px"
-                p="2"
+                size="icon"
+                variant="ghost"
+                className="w-8 h-8 p-1.5"
                 key={iconName}
                 onClick={() => selectIcon(iconName)}
               >

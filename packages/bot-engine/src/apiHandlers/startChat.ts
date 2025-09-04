@@ -1,13 +1,20 @@
 import { BubbleBlockType } from "@typebot.io/blocks-bubbles/constants";
+import type { Message } from "@typebot.io/chat-api/schemas";
+import { restartSession } from "@typebot.io/chat-session/queries/restartSession";
+import { createId } from "@typebot.io/lib/createId";
+import {
+  deleteSessionStore,
+  getSessionStore,
+} from "@typebot.io/runtime-session-store";
 import { computeCurrentProgress } from "../computeCurrentProgress";
+import { assertOriginIsAllowed } from "../helpers/assertOriginIsAllowed";
 import { filterPotentiallySensitiveLogs } from "../logs/filterPotentiallySensitiveLogs";
-import { restartSession } from "../queries/restartSession";
 import { saveStateToDatabase } from "../saveStateToDatabase";
-import type { Message } from "../schemas/api";
 import { startSession } from "../startSession";
 
 type Props = {
   origin: string | undefined;
+  iframeReferrerOrigin: string | undefined;
   message?: Message;
   isOnlyRegistering: boolean;
   publicId: string;
@@ -19,6 +26,7 @@ type Props = {
 
 export const startChat = async ({
   origin,
+  iframeReferrerOrigin,
   message,
   isOnlyRegistering,
   publicId,
@@ -27,6 +35,8 @@ export const startChat = async ({
   resultId: startResultId,
   textBubbleContentFormat,
 }: Props) => {
+  const sessionId = createId();
+  const sessionStore = getSessionStore(sessionId);
   const {
     typebot,
     messages,
@@ -40,6 +50,7 @@ export const startChat = async ({
     setVariableHistory,
   } = await startSession({
     version: 2,
+    sessionStore,
     startParams: {
       type: "live",
       isOnlyRegistering,
@@ -51,17 +62,12 @@ export const startChat = async ({
       message,
     },
   });
+  deleteSessionStore(sessionId);
 
-  let corsOrigin;
-
-  if (
-    newSessionState.allowedOrigins &&
-    newSessionState.allowedOrigins.length > 0
-  ) {
-    if (origin && newSessionState.allowedOrigins.includes(origin))
-      corsOrigin = origin;
-    else corsOrigin = newSessionState.allowedOrigins[0];
-  }
+  assertOriginIsAllowed(origin, {
+    allowedOrigins: newSessionState.allowedOrigins,
+    iframeReferrerOrigin,
+  });
 
   const session = isOnlyRegistering
     ? await restartSession({
@@ -70,6 +76,10 @@ export const startChat = async ({
     : await saveStateToDatabase({
         session: {
           state: newSessionState,
+        },
+        sessionId: {
+          type: "new",
+          id: sessionId,
         },
         input,
         logs,
@@ -94,6 +104,7 @@ export const startChat = async ({
     sessionId: session.id,
     typebot: {
       id: typebot.id,
+      version: typebot.version,
       theme: typebot.theme,
       settings: typebot.settings,
       publishedAt: typebot.publishedAt,
@@ -104,7 +115,6 @@ export const startChat = async ({
     dynamicTheme,
     logs: logs?.filter(filterPotentiallySensitiveLogs),
     clientSideActions,
-    corsOrigin,
     progress: newSessionState.progressMetadata
       ? isEnded
         ? 100

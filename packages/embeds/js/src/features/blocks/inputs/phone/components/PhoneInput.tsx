@@ -3,9 +3,9 @@ import { ChevronDownIcon } from "@/components/icons/ChevronDownIcon";
 import { ShortTextInput } from "@/components/inputs/ShortTextInput";
 import type { CommandData } from "@/features/commands/types";
 import type { InputSubmitContent } from "@/types";
-import { isMobile } from "@/utils/isMobileSignal";
 import { defaultPhoneInputOptions } from "@typebot.io/blocks-inputs/phone/constants";
 import type { PhoneNumberInputBlock } from "@typebot.io/blocks-inputs/phone/schema";
+import { guessDeviceIsMobile } from "@typebot.io/lib/guessDeviceIsMobile";
 import { phoneCountries } from "@typebot.io/lib/phoneCountries";
 import { isEmpty } from "@typebot.io/lib/utils";
 import { For, createSignal, onCleanup, onMount } from "solid-js";
@@ -27,33 +27,27 @@ export const PhoneInput = (props: PhoneInputProps) => {
 
   const handleInput = (inputValue: string | undefined) => {
     setInputValue(inputValue as string);
-    if (
-      (inputValue === "" || inputValue === "+") &&
-      selectedCountryCode() !== "INT"
-    )
-      setSelectedCountryCode("INT");
-    const matchedCountry =
-      inputValue?.startsWith("+") &&
-      inputValue.length > 2 &&
-      phoneCountries.reduce<(typeof phoneCountries)[number] | null>(
-        (matchedCountry, country) => {
-          if (
-            !country?.dial_code ||
-            (matchedCountry !== null && !matchedCountry.dial_code)
-          ) {
-            return matchedCountry;
-          }
-          if (
-            inputValue?.startsWith(country.dial_code) &&
-            country.dial_code.length > (matchedCountry?.dial_code.length ?? 0)
-          ) {
-            return country;
-          }
+
+    if (inputValue?.startsWith("+") && inputValue.length > 2) {
+      const matchedCountry = phoneCountries.reduce<
+        (typeof phoneCountries)[number] | null
+      >((matchedCountry, country) => {
+        if (
+          !country?.dial_code ||
+          (matchedCountry !== null && !matchedCountry.dial_code)
+        ) {
           return matchedCountry;
-        },
-        null,
-      );
-    if (matchedCountry) setSelectedCountryCode(matchedCountry.code);
+        }
+        if (
+          inputValue?.startsWith(country.dial_code) &&
+          country.dial_code.length > (matchedCountry?.dial_code.length ?? 0)
+        ) {
+          return country;
+        }
+        return matchedCountry;
+      }, null);
+      if (matchedCountry) setSelectedCountryCode(matchedCountry.code);
+    }
   };
 
   const checkIfInputIsValid = () =>
@@ -100,7 +94,8 @@ export const PhoneInput = (props: PhoneInputProps) => {
   };
 
   onMount(() => {
-    if (!isMobile() && inputRef) inputRef.focus({ preventScroll: true });
+    if (!guessDeviceIsMobile() && inputRef)
+      inputRef.focus({ preventScroll: true });
     window.addEventListener("message", processIncomingEvent);
   });
 
@@ -159,7 +154,7 @@ export const PhoneInput = (props: PhoneInputProps) => {
             props.labels?.placeholder ??
             defaultPhoneInputOptions.labels.placeholder
           }
-          autofocus={!isMobile()}
+          autofocus={!guessDeviceIsMobile()}
         />
       </div>
       <SendButton type="button" class="h-[56px]" on:click={submit}>

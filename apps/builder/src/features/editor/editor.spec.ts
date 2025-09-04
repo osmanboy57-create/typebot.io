@@ -7,6 +7,7 @@ import {
   importTypebotInDatabase,
 } from "@typebot.io/playwright/databaseActions";
 import { parseDefaultGroupWithBlock } from "@typebot.io/playwright/databaseHelpers";
+import { latestTypebotVersion } from "@typebot.io/schemas/versions";
 
 test.describe.configure({ mode: "parallel" });
 
@@ -18,7 +19,7 @@ test("Edges connection should work", async ({ page }) => {
     },
   ]);
   await page.goto(`/typebots/${typebotId}/edit`);
-  await expect(page.locator("text='Start'")).toBeVisible();
+  await expect(page.getByTestId("event").getByText("Start")).toBeVisible();
   await page.dragAndDrop("text=Button", "#editor-container", {
     targetPosition: { x: 1000, y: 400 },
   });
@@ -130,19 +131,33 @@ test("Published typebot menu should work", async ({ page }) => {
       ...parseDefaultGroupWithBlock({
         type: InputBlockType.TEXT,
       }),
-      version: "6",
+      version: latestTypebotVersion,
     },
   ]);
   await page.goto(`/typebots/${typebotId}/edit`);
-  await expect(page.locator("text='Start'")).toBeVisible();
+  await expect(page.getByTestId("event").getByText("Start")).toBeVisible();
   await expect(page.locator('button >> text="Published"')).toBeVisible();
-  await page.click('[aria-label="Show published typebot menu"]');
+  await page
+    .getByRole("button", { name: "Show published typebot menu" })
+    .click();
   await page.click('text="Close typebot to new responses"');
   await expect(page.locator('button >> text="Closed"')).toBeDisabled();
-  await page.click('[aria-label="Show published typebot menu"]');
+  await page.waitForTimeout(200);
+  await page
+    .getByRole("button", { name: "Show published typebot menu" })
+    .blur();
+  await page
+    .getByRole("button", { name: "Show published typebot menu" })
+    .click();
   await page.click('text="Reopen typebot to new responses"');
   await expect(page.locator('button >> text="Published"')).toBeDisabled();
-  await page.click('[aria-label="Show published typebot menu"]');
+  await page.waitForTimeout(200);
+  await page
+    .getByRole("button", { name: "Show published typebot menu" })
+    .blur();
+  await page
+    .getByRole("button", { name: "Show published typebot menu" })
+    .click();
   await page.click('button >> text="Unpublish typebot"');
   await page.click('button >> text="Publish"');
   await expect(page.locator('button >> text="Published"')).toBeVisible();

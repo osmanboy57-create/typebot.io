@@ -1,4 +1,5 @@
 import { z } from "@typebot.io/zod";
+import { cardsBlockSchema } from "./cards/schema";
 import { buttonsInputSchemas } from "./choice/schema";
 import { dateInputSchema } from "./date/schema";
 import { emailInputSchema } from "./email/schema";
@@ -9,6 +10,7 @@ import { phoneNumberInputBlockSchema } from "./phone/schema";
 import { pictureChoiceBlockSchemas } from "./pictureChoice/schema";
 import { ratingInputBlockSchema } from "./rating/schema";
 import { textInputSchema } from "./text/schema";
+import { timeInputSchema } from "./time/schema";
 import { urlInputSchema } from "./url/schema";
 
 const inputBlockSchemas = [
@@ -18,8 +20,10 @@ const inputBlockSchemas = [
   urlInputSchema,
   phoneNumberInputBlockSchema,
   dateInputSchema,
+  timeInputSchema,
   paymentInputSchema,
   ratingInputBlockSchema,
+  cardsBlockSchema,
 ] as const;
 
 export const inputBlockV5Schema = z.discriminatedUnion("type", [

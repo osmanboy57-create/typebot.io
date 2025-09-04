@@ -20,20 +20,12 @@ const typebotEvent = workspaceEvent.merge(
 const workspaceCreatedEventSchema = workspaceEvent.merge(
   z.object({
     name: z.literal("Workspace created"),
-    data: z.object({
-      name: z.string().optional(),
-      plan: z.nativeEnum(Plan),
-    }),
   }),
 );
 
 const userCreatedEventSchema = userEvent.merge(
   z.object({
     name: z.literal("User created"),
-    data: z.object({
-      email: z.string(),
-      name: z.string().optional(),
-    }),
   }),
 );
 
@@ -43,25 +35,26 @@ const userLoggedInEventSchema = userEvent.merge(
   }),
 );
 
+const userLoggedOutEventSchema = userEvent.merge(
+  z.object({
+    name: z.literal("User logged out"),
+  }),
+);
+
 const userUpdatedEventSchema = userEvent.merge(
   z.object({
     name: z.literal("User updated"),
-    data: z.object({
-      name: z.string().optional(),
-      onboardingCategories: z.array(z.string()).optional(),
-      referral: z.string().optional(),
-      company: z.string().optional(),
-    }),
   }),
 );
 
 const typebotCreatedEventSchema = typebotEvent.merge(
   z.object({
     name: z.literal("Typebot created"),
-    data: z.object({
-      name: z.string(),
-      template: z.string().optional(),
-    }),
+    data: z
+      .object({
+        template: z.string().optional(),
+      })
+      .optional(),
   }),
 );
 
@@ -69,7 +62,6 @@ const publishedTypebotEventSchema = typebotEvent.merge(
   z.object({
     name: z.literal("Typebot published"),
     data: z.object({
-      name: z.string(),
       isFirstPublish: z.literal(true).optional(),
     }),
   }),
@@ -78,9 +70,6 @@ const publishedTypebotEventSchema = typebotEvent.merge(
 const customDomainAddedEventSchema = workspaceEvent.merge(
   z.object({
     name: z.literal("Custom domain added"),
-    data: z.object({
-      domain: z.string(),
-    }),
   }),
 );
 
@@ -94,6 +83,7 @@ const subscriptionUpdatedEventSchema = workspaceEvent.merge(
   z.object({
     name: z.literal("Subscription updated"),
     data: z.object({
+      prevPlan: z.nativeEnum(Plan),
       plan: z.nativeEnum(Plan),
     }),
   }),
@@ -104,6 +94,24 @@ const subscriptionAutoUpdatedEventSchema = workspaceEvent.merge(
     name: z.literal("Subscription automatically updated"),
     data: z.object({
       plan: z.nativeEnum(Plan),
+    }),
+  }),
+);
+
+const subscriptionScheduledForCancellationEventSchema = workspaceEvent.merge(
+  z.object({
+    name: z.literal("Subscription scheduled for cancellation"),
+    data: z.object({
+      plan: z.enum([Plan.STARTER, Plan.PRO]),
+    }),
+  }),
+);
+
+const removedCancellationEventSchema = workspaceEvent.merge(
+  z.object({
+    name: z.literal("Subscription cancellation removed"),
+    data: z.object({
+      plan: z.enum([Plan.STARTER, Plan.PRO]),
     }),
   }),
 );
@@ -186,12 +194,11 @@ export const limitSecondEmailSentEventSchema = workspaceEvent.merge(
   }),
 );
 
-export const clientSideEvents = [removedBrandingEventSchema] as const;
-
-export const eventSchema = z.discriminatedUnion("name", [
+const builderEvents = [
   workspaceCreatedEventSchema,
   userCreatedEventSchema,
   userLoggedInEventSchema,
+  userLoggedOutEventSchema,
   typebotCreatedEventSchema,
   publishedTypebotEventSchema,
   subscriptionUpdatedEventSchema,
@@ -209,7 +216,33 @@ export const eventSchema = z.discriminatedUnion("name", [
   visitedAnalyticsEventSchema,
   limitFirstEmailSentEventSchema,
   limitSecondEmailSentEventSchema,
-  ...clientSideEvents,
+  removedBrandingEventSchema,
+  subscriptionScheduledForCancellationEventSchema,
+  removedCancellationEventSchema,
+] as const;
+
+const pageViewEventSchema = z.object({
+  name: z.literal("$pageview"),
+  visitorId: z.string(),
+  data: z.object({
+    $current_url: z.string(),
+    $pathname: z.string(),
+    $referrer: z.string().optional(),
+    $referring_domain: z.string().optional(),
+    $process_person_profile: z.literal(false),
+    $session_id: z.string(),
+    $utm_source: z.string().optional(),
+    $utm_medium: z.string().optional(),
+    $utm_campaign: z.string().optional(),
+    $device_type: z.enum(["Desktop", "Mobile", "Tablet"]).optional(),
+  }),
+});
+
+const landingPageEvents = [pageViewEventSchema] as const;
+
+export const eventSchema = z.discriminatedUnion("name", [
+  ...builderEvents,
+  ...landingPageEvents,
 ]);
 
 export const clientSideCreateEventSchema = removedBrandingEventSchema.omit({

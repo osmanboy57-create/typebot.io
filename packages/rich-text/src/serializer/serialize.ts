@@ -1,4 +1,3 @@
-import escapeHtml from "escape-html";
 import {
   type BlockType,
   type LeafType,
@@ -212,7 +211,10 @@ export default function serialize(
       }\n${children}\n\`\`\`\n`;
 
     case nodeTypes.link:
-      return `[${children}](${(chunk as any).url || ""})`;
+      return (children === (chunk as any).url || "") &&
+        opts.flavour === "whatsapp"
+        ? children
+        : `[${children}](${(chunk as any).url || ""})`;
     case nodeTypes.image:
       return `![${(chunk as BlockType).caption}](${
         (chunk as BlockType).link || ""
@@ -221,22 +223,8 @@ export default function serialize(
     case nodeTypes.listItemChild:
       const isOL = chunk && chunk.parentType === nodeTypes.ol_list;
       const listIndex = "listIndex" in chunk ? chunk.listIndex : undefined;
-      const treatAsLeaf =
-        (chunk as BlockType).children.length === 1 &&
-        isLeafNode((chunk as BlockType).children[0]!);
-
-      let spacer = "";
-      for (let k = 0; listDepth > k; k++) {
-        if (isOL) {
-          // https://github.com/remarkjs/remark-react/issues/65
-          spacer += "   ";
-        } else {
-          spacer += "  ";
-        }
-      }
-      return `${spacer}${isOL ? `${listIndex}.` : "-"} ${children}${
-        treatAsLeaf ? "\n" : ""
-      }`;
+      const spacer = "  ".repeat(Math.max(0, listDepth));
+      return `${spacer}${isOL ? `${listIndex}.` : "-"} ${children}\n`;
 
     case nodeTypes.paragraph:
       return `${children}\n`;

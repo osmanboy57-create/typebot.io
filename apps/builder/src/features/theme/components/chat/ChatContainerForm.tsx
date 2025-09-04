@@ -1,18 +1,17 @@
-import { DropdownList } from "@/components/DropdownList";
 import { NumberInput } from "@/components/inputs";
+import { BasicSelect } from "@/components/inputs/BasicSelect";
 import { FormLabel, HStack, Stack } from "@chakra-ui/react";
 import {
   defaultBlur,
   defaultContainerBackgroundColor,
   defaultContainerMaxHeight,
   defaultContainerMaxWidth,
-  defaultDarkTextColor,
-  defaultLightTextColor,
   defaultOpacity,
   defaultRoundness,
 } from "@typebot.io/theme/constants";
-import { isChatContainerLight } from "@typebot.io/theme/isChatContainerLight";
+import { isChatContainerLight } from "@typebot.io/theme/helpers/isChatContainerLight";
 import type { ChatTheme, GeneralTheme } from "@typebot.io/theme/schemas";
+import { colors } from "@typebot.io/ui/colors";
 import React from "react";
 import { ContainerThemeForm } from "./ContainerThemeForm";
 
@@ -73,11 +72,11 @@ export const ChatContainerForm = ({
             withVariableButton={false}
             onValueChange={updateMaxWidth}
           />
-          <DropdownList
+          <BasicSelect
             size="sm"
             items={["px", "%", "vh", "vw"]}
-            currentItem={maxWidthUnit}
-            onItemSelect={updateMaxWidthUnit}
+            value={maxWidthUnit}
+            onChange={updateMaxWidthUnit}
           />
         </HStack>
       </HStack>
@@ -96,11 +95,11 @@ export const ChatContainerForm = ({
             onValueChange={updateMaxHeight}
             withVariableButton={false}
           />
-          <DropdownList
+          <BasicSelect
             size="sm"
             items={["px", "%", "vh", "vw"]}
-            currentItem={maxHeightUnit}
-            onItemSelect={updateMaxHeightUnit}
+            value={maxHeightUnit}
+            onChange={updateMaxHeightUnit}
           />
         </HStack>
       </HStack>
@@ -118,8 +117,8 @@ export const ChatContainerForm = ({
             chatContainer: container,
             generalBackground,
           })
-            ? defaultLightTextColor
-            : defaultDarkTextColor,
+            ? colors.gray.light["12"]
+            : colors.gray.dark["12"],
         }}
         onThemeChange={onContainerChange}
       />

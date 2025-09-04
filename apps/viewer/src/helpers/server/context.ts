@@ -1,9 +1,9 @@
 import type { inferAsyncReturnType } from "@trpc/server";
 import type * as trpcNext from "@trpc/server/adapters/next";
 import { env } from "@typebot.io/env";
-import { mockedUser } from "@typebot.io/lib/mockedUser";
 import prisma from "@typebot.io/prisma";
 import type { Prisma } from "@typebot.io/prisma/types";
+import { mockedUser } from "@typebot.io/user/mockedUser";
 import type { NextApiRequest } from "next";
 
 export async function createContext(opts: trpcNext.CreateNextContextOptions) {
@@ -11,11 +11,10 @@ export async function createContext(opts: trpcNext.CreateNextContextOptions) {
 
   return {
     user,
-    origin:
-      (opts.req.headers["x-typebot-iframe-referrer-origin"] as
-        | string
-        | undefined) ?? opts.req.headers.origin,
-    res: opts.res,
+    origin: opts.req.headers.origin,
+    iframeReferrerOrigin: opts.req.headers[
+      "x-typebot-iframe-referrer-origin"
+    ] as string | undefined,
   };
 }
 

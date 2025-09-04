@@ -1,4 +1,5 @@
 import { ButtonsBlockSettings } from "@/features/blocks/inputs/buttons/components/ButtonsBlockSettings";
+import { CardsBlockSettings } from "@/features/blocks/inputs/cards/components/CardsBlockSettings";
 import { DateInputSettings } from "@/features/blocks/inputs/date/components/DateInputSettings";
 import { EmailInputSettings } from "@/features/blocks/inputs/emailInput/components/EmailInputSettings";
 import { FileInputSettings } from "@/features/blocks/inputs/fileUpload/components/FileInputSettings";
@@ -8,6 +9,7 @@ import { PhoneInputSettings } from "@/features/blocks/inputs/phone/components/Ph
 import { PictureChoiceSettings } from "@/features/blocks/inputs/pictureChoice/components/PictureChoiceSettings";
 import { RatingInputSettings } from "@/features/blocks/inputs/rating/components/RatingInputSettings";
 import { TextInputSettings } from "@/features/blocks/inputs/textInput/components/TextInputSettings";
+import { TimeInputSettings } from "@/features/blocks/inputs/time/components/TimeInputSettings";
 import { UrlInputSettings } from "@/features/blocks/inputs/url/components/UrlInputSettings";
 import { ChatwootSettings } from "@/features/blocks/integrations/chatwoot/components/ChatwootSettings";
 import { GoogleAnalyticsSettings } from "@/features/blocks/integrations/googleAnalytics/components/GoogleAnalyticsSettings";
@@ -27,43 +29,41 @@ import { SetVariableSettings } from "@/features/blocks/logic/setVariable/compone
 import { TypebotLinkForm } from "@/features/blocks/logic/typebotLink/components/TypebotLinkForm";
 import { WaitSettings } from "@/features/blocks/logic/wait/components/WaitSettings";
 import { WebhookSettings } from "@/features/blocks/logic/webhook/components/WebhookSettings";
+import { CommandEventSettings } from "@/features/events/components/CommandEventSettings";
+import { InvalidReplyEventSettings } from "@/features/events/components/InvalidReplyEventSettings";
+import { ReplyEventSettings } from "@/features/events/components/ReplyEventSettings";
 import { useForgedBlock } from "@/features/forge/hooks/useForgedBlock";
 import { VideoOnboardingPopover } from "@/features/onboarding/components/VideoOnboardingPopover";
 import { hasOnboardingVideo } from "@/features/onboarding/helpers/hasOnboardingVideo";
-import {
-  Flex,
-  PopoverArrow,
-  PopoverBody,
-  PopoverContent,
-  Portal,
-  SlideFade,
-  Stack,
-  useColorModeValue,
-  useEventListener,
-} from "@chakra-ui/react";
-import type {
-  Block,
-  BlockOptions,
-  BlockWithOptions,
-} from "@typebot.io/blocks-core/schemas/schema";
+import { Flex, SlideFade, Stack, useEventListener } from "@chakra-ui/react";
+import type { BlockWithOptions } from "@typebot.io/blocks-core/schemas/schema";
 import { InputBlockType } from "@typebot.io/blocks-inputs/constants";
 import { IntegrationBlockType } from "@typebot.io/blocks-integrations/constants";
 import { LogicBlockType } from "@typebot.io/blocks-logic/constants";
+import { EventType } from "@typebot.io/events/constants";
+import type { TEventWithOptions } from "@typebot.io/events/schemas";
+import { Popover } from "@typebot.io/ui/components/Popover";
+import { cn } from "@typebot.io/ui/lib/cn";
 import { useRef, useState } from "react";
 import { ForgedBlockSettings } from "../../../../forge/components/ForgedBlockSettings";
 import { SettingsHoverBar } from "./SettingsHoverBar";
 
 type Props = {
-  block: BlockWithOptions;
+  node: BlockWithOptions | TEventWithOptions;
   groupId: string | undefined;
+  isExpanded: boolean;
   onExpandClick: () => void;
-  onBlockChange: (updates: Partial<Block>) => void;
+  onNodeChange: (
+    updates: Partial<BlockWithOptions | TEventWithOptions>,
+  ) => void;
+  side?: "left" | "right" | "top" | "bottom";
 };
 
-export const SettingsPopoverContent = ({ onExpandClick, ...props }: Props) => {
+export const SettingsPopoverContent = (props: Props) => {
   const [isHovering, setIsHovering] = useState(false);
-  const arrowColor = useColorModeValue("white", "gray.800");
-  const { blockDef } = useForgedBlock(props.block.type);
+  const { blockDef } = useForgedBlock({
+    nodeType: props.node.type,
+  });
   const ref = useRef<HTMLDivElement | null>(null);
   const handleMouseDown = (e: React.MouseEvent) => e.stopPropagation();
 
@@ -73,75 +73,76 @@ export const SettingsPopoverContent = ({ onExpandClick, ...props }: Props) => {
   useEventListener("wheel", handleMouseWheel, ref.current);
 
   return (
-    <Portal>
-      <PopoverContent onMouseDown={handleMouseDown} pos="relative">
-        <PopoverArrow bgColor={arrowColor} />
-
-        <VideoOnboardingPopover.Root
-          type={props.block.type}
-          blockDef={blockDef}
-        >
-          {({ onToggle }) => (
-            <PopoverBody
-              py="3"
-              overflowY="auto"
-              maxH="400px"
-              ref={ref}
-              shadow="lg"
-              onMouseEnter={() => setIsHovering(true)}
-              onMouseLeave={() => setIsHovering(false)}
+    <Popover.Popup
+      ref={ref}
+      onMouseDown={handleMouseDown}
+      className={cn(
+        "p-4 min-w-[400px]",
+        props.isExpanded
+          ? "w-[calc(var(--available-width)-42px)]"
+          : "max-w-[400px]",
+        props.isExpanded ? "max-h-[80vh]" : "max-h-[60vh]",
+      )}
+      onMouseEnter={() => setIsHovering(true)}
+      onMouseLeave={() => setIsHovering(false)}
+      side={props.side}
+    >
+      <VideoOnboardingPopover
+        type={props.node.type}
+        blockDef={blockDef}
+        offset={20}
+      >
+        {({ onToggle }) => (
+          <Stack spacing={3}>
+            <Flex
+              w="full"
+              pos="absolute"
+              top="-50px"
+              height="50px"
+              right={0}
+              justifyContent="flex-end"
+              align="center"
             >
-              <Stack spacing={3}>
-                <Flex
-                  w="full"
-                  pos="absolute"
-                  top="-56px"
-                  height="64px"
-                  right={0}
-                  justifyContent="flex-end"
-                  align="center"
-                >
-                  <SlideFade in={isHovering} unmountOnExit>
-                    <SettingsHoverBar
-                      onExpandClick={onExpandClick}
-                      onVideoOnboardingClick={onToggle}
-                      blockType={props.block.type}
-                      blockDef={blockDef}
-                      isVideoOnboardingItemDisplayed={hasOnboardingVideo({
-                        blockType: props.block.type,
-                        blockDef,
-                      })}
-                    />
-                  </SlideFade>
-                </Flex>
-                <BlockSettings {...props} />
-              </Stack>
-            </PopoverBody>
-          )}
-        </VideoOnboardingPopover.Root>
-      </PopoverContent>
-    </Portal>
+              <SlideFade in={isHovering} unmountOnExit>
+                <SettingsHoverBar
+                  isExpanded={props.isExpanded}
+                  onExpandClick={props.onExpandClick}
+                  onVideoOnboardingClick={onToggle}
+                  nodeType={props.node.type}
+                  blockDef={blockDef}
+                  isVideoOnboardingItemDisplayed={hasOnboardingVideo({
+                    nodeType: props.node.type,
+                    blockDef,
+                  })}
+                />
+              </SlideFade>
+            </Flex>
+            <NodeSettings {...props} />
+          </Stack>
+        )}
+      </VideoOnboardingPopover>
+    </Popover.Popup>
   );
 };
 
-export const BlockSettings = ({
-  block,
-  groupId,
-  onBlockChange,
+export const NodeSettings = ({
+  node,
+  onNodeChange,
 }: {
-  block: BlockWithOptions;
-  groupId: string | undefined;
-  onBlockChange: (block: Partial<Block>) => void;
+  node: BlockWithOptions | TEventWithOptions;
+  onNodeChange: (node: Partial<BlockWithOptions | TEventWithOptions>) => void;
 }): JSX.Element | null => {
-  const updateOptions = (options: BlockOptions) => {
-    onBlockChange({ options });
+  const updateOptions = (
+    options: BlockWithOptions["options"] | TEventWithOptions["options"],
+  ) => {
+    onNodeChange({ options });
   };
 
-  switch (block.type) {
+  switch (node.type) {
     case InputBlockType.TEXT: {
       return (
         <TextInputSettings
-          options={block.options}
+          options={node.options}
           onOptionsChange={updateOptions}
         />
       );
@@ -149,7 +150,7 @@ export const BlockSettings = ({
     case InputBlockType.NUMBER: {
       return (
         <NumberInputSettings
-          options={block.options}
+          options={node.options}
           onOptionsChange={updateOptions}
         />
       );
@@ -157,7 +158,7 @@ export const BlockSettings = ({
     case InputBlockType.EMAIL: {
       return (
         <EmailInputSettings
-          options={block.options}
+          options={node.options}
           onOptionsChange={updateOptions}
         />
       );
@@ -165,7 +166,7 @@ export const BlockSettings = ({
     case InputBlockType.URL: {
       return (
         <UrlInputSettings
-          options={block.options}
+          options={node.options}
           onOptionsChange={updateOptions}
         />
       );
@@ -173,7 +174,15 @@ export const BlockSettings = ({
     case InputBlockType.DATE: {
       return (
         <DateInputSettings
-          options={block.options}
+          options={node.options}
+          onOptionsChange={updateOptions}
+        />
+      );
+    }
+    case InputBlockType.TIME: {
+      return (
+        <TimeInputSettings
+          options={node.options}
           onOptionsChange={updateOptions}
         />
       );
@@ -181,7 +190,7 @@ export const BlockSettings = ({
     case InputBlockType.PHONE: {
       return (
         <PhoneInputSettings
-          options={block.options}
+          options={node.options}
           onOptionsChange={updateOptions}
         />
       );
@@ -189,7 +198,7 @@ export const BlockSettings = ({
     case InputBlockType.CHOICE: {
       return (
         <ButtonsBlockSettings
-          options={block.options}
+          options={node.options}
           onOptionsChange={updateOptions}
         />
       );
@@ -197,7 +206,7 @@ export const BlockSettings = ({
     case InputBlockType.PICTURE_CHOICE: {
       return (
         <PictureChoiceSettings
-          options={block.options}
+          options={node.options}
           onOptionsChange={updateOptions}
         />
       );
@@ -205,7 +214,7 @@ export const BlockSettings = ({
     case InputBlockType.PAYMENT: {
       return (
         <PaymentSettings
-          options={block.options}
+          options={node.options}
           onOptionsChange={updateOptions}
         />
       );
@@ -213,7 +222,7 @@ export const BlockSettings = ({
     case InputBlockType.RATING: {
       return (
         <RatingInputSettings
-          options={block.options}
+          options={node.options}
           onOptionsChange={updateOptions}
         />
       );
@@ -221,7 +230,15 @@ export const BlockSettings = ({
     case InputBlockType.FILE: {
       return (
         <FileInputSettings
-          options={block.options}
+          options={node.options}
+          onOptionsChange={updateOptions}
+        />
+      );
+    }
+    case InputBlockType.CARDS: {
+      return (
+        <CardsBlockSettings
+          options={node.options}
           onOptionsChange={updateOptions}
         />
       );
@@ -229,7 +246,7 @@ export const BlockSettings = ({
     case LogicBlockType.SET_VARIABLE: {
       return (
         <SetVariableSettings
-          options={block.options}
+          options={node.options}
           onOptionsChange={updateOptions}
         />
       );
@@ -237,7 +254,7 @@ export const BlockSettings = ({
     case LogicBlockType.REDIRECT: {
       return (
         <RedirectSettings
-          options={block.options}
+          options={node.options}
           onOptionsChange={updateOptions}
         />
       );
@@ -245,7 +262,7 @@ export const BlockSettings = ({
     case LogicBlockType.SCRIPT: {
       return (
         <ScriptSettings
-          options={block.options}
+          options={node.options}
           onOptionsChange={updateOptions}
         />
       );
@@ -253,31 +270,25 @@ export const BlockSettings = ({
     case LogicBlockType.TYPEBOT_LINK: {
       return (
         <TypebotLinkForm
-          options={block.options}
+          options={node.options}
           onOptionsChange={updateOptions}
         />
       );
     }
     case LogicBlockType.WAIT: {
       return (
-        <WaitSettings options={block.options} onOptionsChange={updateOptions} />
+        <WaitSettings options={node.options} onOptionsChange={updateOptions} />
       );
     }
     case LogicBlockType.JUMP: {
-      return groupId ? (
-        <JumpSettings
-          groupId={groupId}
-          options={block.options}
-          onOptionsChange={updateOptions}
-        />
-      ) : (
-        <></>
+      return (
+        <JumpSettings options={node.options} onOptionsChange={updateOptions} />
       );
     }
     case LogicBlockType.AB_TEST: {
       return (
         <AbTestSettings
-          options={block.options}
+          options={node.options}
           onOptionsChange={updateOptions}
         />
       );
@@ -285,40 +296,40 @@ export const BlockSettings = ({
     case IntegrationBlockType.GOOGLE_SHEETS: {
       return (
         <GoogleSheetsSettings
-          options={block.options}
+          options={node.options}
           onOptionsChange={updateOptions}
-          blockId={block.id}
+          blockId={node.id}
         />
       );
     }
     case IntegrationBlockType.GOOGLE_ANALYTICS: {
       return (
         <GoogleAnalyticsSettings
-          options={block.options}
+          options={node.options}
           onOptionsChange={updateOptions}
         />
       );
     }
     case IntegrationBlockType.ZAPIER: {
-      return <ZapierSettings block={block} onOptionsChange={updateOptions} />;
+      return <ZapierSettings block={node} onOptionsChange={updateOptions} />;
     }
     case IntegrationBlockType.MAKE_COM: {
-      return <MakeComSettings block={block} onOptionsChange={updateOptions} />;
+      return <MakeComSettings block={node} onOptionsChange={updateOptions} />;
     }
     case IntegrationBlockType.PABBLY_CONNECT: {
       return (
-        <PabblyConnectSettings block={block} onOptionsChange={updateOptions} />
+        <PabblyConnectSettings block={node} onOptionsChange={updateOptions} />
       );
     }
     case IntegrationBlockType.HTTP_REQUEST: {
       return (
-        <HttpRequestSettings block={block} onOptionsChange={updateOptions} />
+        <HttpRequestSettings block={node} onOptionsChange={updateOptions} />
       );
     }
     case IntegrationBlockType.EMAIL: {
       return (
         <SendEmailSettings
-          options={block.options}
+          options={node.options}
           onOptionsChange={updateOptions}
         />
       );
@@ -326,20 +337,17 @@ export const BlockSettings = ({
     case IntegrationBlockType.CHATWOOT: {
       return (
         <ChatwootSettings
-          options={block.options}
+          options={node.options}
           onOptionsChange={updateOptions}
         />
       );
     }
     case IntegrationBlockType.OPEN_AI: {
-      return <OpenAISettings block={block} onOptionsChange={updateOptions} />;
+      return <OpenAISettings block={node} onOptionsChange={updateOptions} />;
     }
     case IntegrationBlockType.PIXEL: {
       return (
-        <PixelSettings
-          options={block.options}
-          onOptionsChange={updateOptions}
-        />
+        <PixelSettings options={node.options} onOptionsChange={updateOptions} />
       );
     }
     case LogicBlockType.CONDITION:
@@ -347,14 +355,35 @@ export const BlockSettings = ({
     case LogicBlockType.WEBHOOK:
       return (
         <WebhookSettings
-          blockId={block.id}
-          options={block.options}
+          blockId={node.id}
+          options={node.options}
+          onOptionsChange={updateOptions}
+        />
+      );
+    case EventType.COMMAND:
+      return (
+        <CommandEventSettings
+          options={node.options}
+          onOptionsChange={updateOptions}
+        />
+      );
+    case EventType.REPLY:
+      return (
+        <ReplyEventSettings
+          options={node.options}
+          onOptionsChange={updateOptions}
+        />
+      );
+    case EventType.INVALID_REPLY:
+      return (
+        <InvalidReplyEventSettings
+          options={node.options}
           onOptionsChange={updateOptions}
         />
       );
     default: {
       return (
-        <ForgedBlockSettings block={block} onOptionsChange={updateOptions} />
+        <ForgedBlockSettings block={node} onOptionsChange={updateOptions} />
       );
     }
   }

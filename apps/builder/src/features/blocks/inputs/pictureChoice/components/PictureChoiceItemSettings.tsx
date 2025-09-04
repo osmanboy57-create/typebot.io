@@ -2,19 +2,14 @@ import { ImageUploadContent } from "@/components/ImageUploadContent";
 import { SwitchWithRelatedSettings } from "@/components/SwitchWithRelatedSettings";
 import { TextInput, Textarea } from "@/components/inputs";
 import { ConditionForm } from "@/features/blocks/logic/condition/components/ConditionForm";
-import {
-  Button,
-  HStack,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-  Stack,
-  Text,
-} from "@chakra-ui/react";
+import { useOpenControls } from "@/hooks/useOpenControls";
+import { HStack, Stack, Text } from "@chakra-ui/react";
 import { useTranslate } from "@tolgee/react";
 import type { PictureChoiceItem } from "@typebot.io/blocks-inputs/pictureChoice/schema";
 import { LogicalOperator } from "@typebot.io/conditions/constants";
 import type { Condition } from "@typebot.io/conditions/schemas";
+import { Button } from "@typebot.io/ui/components/Button";
+import { Popover } from "@typebot.io/ui/components/Popover";
 import React from "react";
 
 type Props = {
@@ -33,6 +28,7 @@ export const PictureChoiceItemSettings = ({
   onItemChange,
 }: Props) => {
   const { t } = useTranslate();
+  const imageUploadPopoverControls = useOpenControls();
 
   const updateTitle = (title: string) => onItemChange({ ...item, title });
 
@@ -42,6 +38,8 @@ export const PictureChoiceItemSettings = ({
 
   const updateDescription = (description: string) =>
     onItemChange({ ...item, description });
+
+  const updateValue = (value: string) => onItemChange({ ...item, value });
 
   const updateIsDisplayConditionEnabled = (isEnabled: boolean) =>
     onItemChange({
@@ -67,35 +65,35 @@ export const PictureChoiceItemSettings = ({
         <Text fontWeight="medium">
           {t("blocks.inputs.picture.itemSettings.image.label")}
         </Text>
-        <Popover isLazy>
-          {({ onClose }) => (
-            <>
-              <PopoverTrigger>
-                <Button size="sm">
-                  {item.pictureSrc
-                    ? t("blocks.inputs.picture.itemSettings.image.change.label")
-                    : t("blocks.inputs.picture.itemSettings.image.pick.label")}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent p="4" w="500px">
-                <ImageUploadContent
-                  uploadFileProps={{
-                    workspaceId,
-                    typebotId,
-                    blockId,
-                    itemId: item.id,
-                  }}
-                  defaultUrl={item.pictureSrc}
-                  onSubmit={(url) => {
-                    updateImage(url);
-                    onClose();
-                  }}
-                  excludedTabs={["emoji"]}
-                />
-              </PopoverContent>
-            </>
-          )}
-        </Popover>
+        <Popover.Root {...imageUploadPopoverControls}>
+          <Popover.Trigger>
+            <Button size="sm" variant="secondary">
+              {item.pictureSrc
+                ? t("blocks.inputs.picture.itemSettings.image.change.label")
+                : t("blocks.inputs.picture.itemSettings.image.pick.label")}
+            </Button>
+          </Popover.Trigger>
+          <Popover.Popup>
+            <ImageUploadContent
+              uploadFileProps={{
+                workspaceId,
+                typebotId,
+                blockId,
+                itemId: item.id,
+              }}
+              defaultUrl={item.pictureSrc}
+              onSubmit={(url) => {
+                updateImage(url);
+                imageUploadPopoverControls.onClose();
+              }}
+              additionalTabs={{
+                giphy: true,
+                unsplash: true,
+                icon: true,
+              }}
+            />
+          </Popover.Popup>
+        </Popover.Root>
       </HStack>
       <TextInput
         label={t("blocks.inputs.picture.itemSettings.title.label")}
@@ -106,6 +104,14 @@ export const PictureChoiceItemSettings = ({
         label={t("blocks.inputs.settings.description.label")}
         defaultValue={item.description}
         onChange={updateDescription}
+      />
+      <TextInput
+        label={t("blocks.inputs.internalValue.label")}
+        moreInfoTooltip={t(
+          "blocks.inputs.picture.itemSettings.pictureValue.helperText",
+        )}
+        defaultValue={item.value}
+        onChange={updateValue}
       />
       <SwitchWithRelatedSettings
         label={t("blocks.inputs.settings.displayCondition.label")}

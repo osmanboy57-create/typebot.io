@@ -50,11 +50,11 @@ const httpRequestSchema = z.union([
 export const httpRequestOptionsV5Schema = z.object({
   variablesForTest: z.array(variableForTestSchema).optional(),
   responseVariableMapping: z.array(responseVariableMappingSchema).optional(),
-  isAdvancedConfig: z.boolean().optional(),
   isCustomBody: z.boolean().optional(),
   isExecutedOnClient: z.boolean().optional(),
   webhook: httpRequestSchemas.v5.optional(),
   timeout: z.number().min(1).max(maxTimeout).optional(),
+  proxyCredentialsId: z.string().optional(),
 });
 
 const httpRequestOptionsSchemas = {

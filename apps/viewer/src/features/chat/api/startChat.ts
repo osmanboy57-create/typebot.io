@@ -3,7 +3,7 @@ import { startChat as startChatFn } from "@typebot.io/bot-engine/apiHandlers/sta
 import {
   startChatInputSchema,
   startChatResponseSchema,
-} from "@typebot.io/bot-engine/schemas/api";
+} from "@typebot.io/chat-api/schemas";
 
 export const startChat = publicProcedure
   .meta({
@@ -15,11 +15,10 @@ export const startChat = publicProcedure
   })
   .input(startChatInputSchema)
   .output(startChatResponseSchema)
-  .mutation(async ({ input, ctx: { origin, res } }) => {
-    const { corsOrigin, ...response } = await startChatFn({
+  .mutation(async ({ input, ctx: { origin, iframeReferrerOrigin } }) =>
+    startChatFn({
       ...input,
       origin,
-    });
-    if (corsOrigin) res.setHeader("Access-Control-Allow-Origin", corsOrigin);
-    return response;
-  });
+      iframeReferrerOrigin,
+    }),
+  );

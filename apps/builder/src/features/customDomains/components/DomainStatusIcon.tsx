@@ -1,8 +1,9 @@
+import { MoreInfoTooltip } from "@/components/MoreInfoTooltip";
 import { XCircleIcon } from "@/components/icons";
-import { useToast } from "@/hooks/useToast";
-import { trpc } from "@/lib/trpc";
-import { Flex, Tooltip, useDisclosure } from "@chakra-ui/react";
-import { CustomDomainConfigModal } from "./CustomDomainConfigModal";
+import { trpc } from "@/lib/queryClient";
+import { useDisclosure } from "@chakra-ui/react";
+import { useQuery } from "@tanstack/react-query";
+import { CustomDomainConfigDialog } from "./CustomDomainConfigDialog";
 
 type Props = {
   domain: string;
@@ -10,29 +11,21 @@ type Props = {
 };
 export default function DomainStatusIcon({ domain, workspaceId }: Props) {
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const { showToast } = useToast();
-  const { data, isLoading } = trpc.customDomains.verifyCustomDomain.useQuery(
-    {
+  const { data, isLoading } = useQuery(
+    trpc.customDomains.verifyCustomDomain.queryOptions({
       name: domain,
       workspaceId,
-    },
-    {
-      onError: (err) => {
-        showToast({ description: err.message });
-      },
-    },
+    }),
   );
 
   if (isLoading || data?.status === "Valid Configuration") return null;
 
   return (
     <>
-      <Tooltip label={data?.status}>
-        <Flex onClick={onOpen} cursor="pointer">
-          <XCircleIcon stroke="red.500" />
-        </Flex>
-      </Tooltip>
-      <CustomDomainConfigModal
+      <MoreInfoTooltip icon={<XCircleIcon stroke="red.500" />} onClick={onOpen}>
+        {data?.status}
+      </MoreInfoTooltip>
+      <CustomDomainConfigDialog
         workspaceId={workspaceId}
         isOpen={isOpen}
         domain={domain}

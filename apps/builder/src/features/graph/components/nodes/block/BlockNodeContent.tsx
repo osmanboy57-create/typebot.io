@@ -4,6 +4,7 @@ import { ImageBubbleContent } from "@/features/blocks/bubbles/image/components/I
 import { TextBubbleContent } from "@/features/blocks/bubbles/textBubble/components/TextBubbleContent";
 import { VideoBubbleContent } from "@/features/blocks/bubbles/video/components/VideoBubbleContent";
 import { ButtonsBlockNode } from "@/features/blocks/inputs/buttons/components/ButtonsBlockNode";
+import { CardsBlockNode } from "@/features/blocks/inputs/cards/components/CardsBlockNode";
 import { DateNodeContent } from "@/features/blocks/inputs/date/components/DateNodeContent";
 import { EmailInputNodeContent } from "@/features/blocks/inputs/emailInput/components/EmailInputNodeContent";
 import { FileInputContent } from "@/features/blocks/inputs/fileUpload/components/FileInputContent";
@@ -13,6 +14,7 @@ import { PhoneNodeContent } from "@/features/blocks/inputs/phone/components/Phon
 import { PictureChoiceNode } from "@/features/blocks/inputs/pictureChoice/components/PictureChoiceNode";
 import { RatingInputContent } from "@/features/blocks/inputs/rating/components/RatingInputContent";
 import { TextInputNodeContent } from "@/features/blocks/inputs/textInput/components/TextInputNodeContent";
+import { TimeNodeContent } from "@/features/blocks/inputs/time/components/TimeNodeContent";
 import { UrlNodeContent } from "@/features/blocks/inputs/url/components/UrlNodeContent";
 import { ChatwootNodeBody } from "@/features/blocks/integrations/chatwoot/components/ChatwootNodeBody";
 import { GoogleAnalyticsNodeBody } from "@/features/blocks/integrations/googleAnalytics/components/GoogleAnalyticsNodeBody";
@@ -25,8 +27,10 @@ import { PixelNodeBody } from "@/features/blocks/integrations/pixel/components/P
 import { SendEmailContent } from "@/features/blocks/integrations/sendEmail/components/SendEmailContent";
 import { ZapierContent } from "@/features/blocks/integrations/zapier/components/ZapierContent";
 import { AbTestNodeBody } from "@/features/blocks/logic/abTest/components/AbTestNodeBody";
+import { ConditionBlockContent } from "@/features/blocks/logic/condition/components/ConditionBlockContent";
 import { JumpNodeBody } from "@/features/blocks/logic/jump/components/JumpNodeBody";
 import { RedirectNodeContent } from "@/features/blocks/logic/redirect/components/RedirectNodeContent";
+import { ReturnBlockNodeContent } from "@/features/blocks/logic/return/components/ReturnBlockNodeContent";
 import { ScriptNodeContent } from "@/features/blocks/logic/script/components/ScriptNodeContent";
 import { SetVariableContent } from "@/features/blocks/logic/setVariable/components/SetVariableContent";
 import { TypebotLinkNode } from "@/features/blocks/logic/typebotLink/components/TypebotLinkNode";
@@ -41,7 +45,6 @@ import type {
 import { InputBlockType } from "@typebot.io/blocks-inputs/constants";
 import { IntegrationBlockType } from "@typebot.io/blocks-integrations/constants";
 import { LogicBlockType } from "@typebot.io/blocks-logic/constants";
-import { ItemNodesList } from "../item/ItemNodesList";
 
 type Props = {
   block: BlockV6;
@@ -93,6 +96,9 @@ export const BlockNodeContent = ({
     case InputBlockType.DATE: {
       return <DateNodeContent variableId={block.options?.variableId} />;
     }
+    case InputBlockType.TIME: {
+      return <TimeNodeContent variableId={block.options?.variableId} />;
+    }
     case InputBlockType.PAYMENT: {
       return <PaymentInputContent block={block} />;
     }
@@ -101,6 +107,9 @@ export const BlockNodeContent = ({
     }
     case InputBlockType.FILE: {
       return <FileInputContent options={block.options} />;
+    }
+    case InputBlockType.CARDS: {
+      return <CardsBlockNode block={block} indices={indices} />;
     }
     case LogicBlockType.SET_VARIABLE: {
       return <SetVariableContent block={block} />;
@@ -123,9 +132,11 @@ export const BlockNodeContent = ({
     case LogicBlockType.TYPEBOT_LINK:
       return <TypebotLinkNode block={block} />;
     case LogicBlockType.CONDITION:
-      return <ItemNodesList block={block} indices={indices} />;
+      return <ConditionBlockContent block={block} indices={indices} />;
     case LogicBlockType.WEBHOOK:
       return <WebhookNodeContent options={block.options} />;
+    case LogicBlockType.RETURN:
+      return <ReturnBlockNodeContent />;
     case IntegrationBlockType.GOOGLE_SHEETS: {
       return <GoogleSheetsNodeContent options={block.options} />;
     }

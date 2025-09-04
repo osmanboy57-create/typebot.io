@@ -1,25 +1,31 @@
 import { createId } from "@paralleldrive/cuid2";
 import { defaultTypebotLinkOptions } from "@typebot.io/blocks-logic/typebotLink/constants";
 import type { TypebotLinkBlock } from "@typebot.io/blocks-logic/typebotLink/schema";
-import { byId, isNotDefined } from "@typebot.io/lib/utils";
-import prisma from "@typebot.io/prisma";
-import type { Edge } from "@typebot.io/typebot/schemas/edge";
-import type { Variable } from "@typebot.io/variables/schemas";
-import { addEdgeToTypebot, createPortalEdge } from "../../../addEdgeToTypebot";
-import { createResultIfNotExist } from "../../../queries/createResultIfNotExist";
-import type { ChatLog } from "../../../schemas/api";
 import {
   type SessionState,
   type TypebotInSession,
   typebotInSessionStateSchema,
-} from "../../../schemas/chatSession";
+} from "@typebot.io/chat-session/schemas";
+import { byId, isNotDefined } from "@typebot.io/lib/utils";
+import type { LogInSession } from "@typebot.io/logs/schemas";
+import prisma from "@typebot.io/prisma";
+import type { SessionStore } from "@typebot.io/runtime-session-store";
+import { isTypebotVersionAtLeastV6 } from "@typebot.io/schemas/helpers/isTypebotVersionAtLeastV6";
+import { settingsSchema } from "@typebot.io/settings/schemas";
+import type { Edge } from "@typebot.io/typebot/schemas/edge";
+import { isSingleVariable } from "@typebot.io/variables/isSingleVariable";
+import { parseVariables } from "@typebot.io/variables/parseVariables";
+import type { Variable } from "@typebot.io/variables/schemas";
+import { addVirtualEdge } from "../../../addPortalEdge";
+import { isTypebotInSessionAtLeastV6 } from "../../../helpers/isTypebotInSessionAtLeastV6";
+import { createResultIfNotExist } from "../../../queries/createResultIfNotExist";
 import type { ExecuteLogicResponse } from "../../../types";
 
 export const executeTypebotLink = async (
-  state: SessionState,
   block: TypebotLinkBlock,
+  { sessionStore, state }: { sessionStore: SessionStore; state: SessionState },
 ): Promise<ExecuteLogicResponse> => {
-  const logs: ChatLog[] = [];
+  const logs: LogInSession[] = [];
   const typebotId = block.options?.typebotId;
   if (!typebotId) {
     logs.push({
@@ -35,7 +41,11 @@ export const executeTypebotLink = async (
   let nextGroupId: string | undefined;
   if (isLinkingSameTypebot) {
     newSessionState = await addSameTypebotToState({ state, block });
-    nextGroupId = block.options?.groupId;
+    nextGroupId = getNextGroupId(block.options?.groupId, {
+      nextTypebot: state.typebotsQueue[0].typebot,
+      state,
+      sessionStore,
+    });
   } else {
     const linkedTypebot = await fetchTypebot(state, typebotId);
     if (!linkedTypebot) {
@@ -51,7 +61,11 @@ export const executeTypebotLink = async (
       block,
       linkedTypebot,
     );
-    nextGroupId = getNextGroupId(block.options?.groupId, linkedTypebot);
+    nextGroupId = getNextGroupId(block.options?.groupId, {
+      nextTypebot: linkedTypebot,
+      state,
+      sessionStore,
+    });
   }
 
   if (!nextGroupId) {
@@ -63,12 +77,14 @@ export const executeTypebotLink = async (
     return { outgoingEdgeId: block.outgoingEdgeId, logs };
   }
 
-  const portalEdge = createPortalEdge({ to: { groupId: nextGroupId } });
+  const virtualEdgeMetadata = addVirtualEdge(newSessionState, {
+    to: { groupId: nextGroupId },
+  });
 
-  newSessionState = addEdgeToTypebot(newSessionState, portalEdge);
+  newSessionState = virtualEdgeMetadata.newSessionState;
 
   return {
-    outgoingEdgeId: portalEdge.id,
+    outgoingEdgeId: virtualEdgeMetadata.edgeId,
     newSessionState,
   };
 };
@@ -79,35 +95,33 @@ const addSameTypebotToState = async ({
 }: {
   state: SessionState;
   block: TypebotLinkBlock;
-}) => {
-  const currentTypebotInQueue = state.typebotsQueue[0];
+}): Promise<SessionState> => {
+  let newSessionState = state;
+  const resumeTo = getResumeEdgeToProps(state, block);
+  let resumeEdgeId: string | undefined;
+  if (resumeTo) {
+    const virtualEdgeMetadata = addVirtualEdge(state, {
+      to: resumeTo,
+    });
+    newSessionState = virtualEdgeMetadata.newSessionState;
+    resumeEdgeId = virtualEdgeMetadata.edgeId;
+  }
 
-  const resumeEdge = createResumeEdgeIfNecessary(state, block);
-
-  const currentTypebotWithResumeEdge = resumeEdge
-    ? {
-        ...currentTypebotInQueue,
-        typebot: {
-          ...currentTypebotInQueue.typebot,
-          edges: [...currentTypebotInQueue.typebot.edges, resumeEdge],
-        },
-      }
-    : currentTypebotInQueue;
-
+  const edgeIdToQueue = block.outgoingEdgeId ?? resumeEdgeId;
   return {
-    ...state,
+    ...newSessionState,
     typebotsQueue: [
       {
         typebot: {
-          ...currentTypebotInQueue.typebot,
+          ...newSessionState.typebotsQueue[0].typebot,
         },
-        resultId: currentTypebotInQueue.resultId,
-        edgeIdToTriggerWhenDone: block.outgoingEdgeId ?? resumeEdge?.id,
-        answers: currentTypebotInQueue.answers,
+        resultId: newSessionState.typebotsQueue[0].resultId,
+        queuedEdgeIds: edgeIdToQueue ? [edgeIdToQueue] : undefined,
+        answers: newSessionState.typebotsQueue[0].answers,
         isMergingWithParent: true,
       },
-      currentTypebotWithResumeEdge,
-      ...state.typebotsQueue.slice(1),
+      newSessionState.typebotsQueue[0],
+      ...newSessionState.typebotsQueue.slice(1),
     ],
   };
 };
@@ -117,38 +131,37 @@ const addLinkedTypebotToState = async (
   block: TypebotLinkBlock,
   linkedTypebot: TypebotInSession,
 ): Promise<SessionState> => {
-  const currentTypebotInQueue = state.typebotsQueue[0];
+  let newSessionState = state;
+  const resumeTo = getResumeEdgeToProps(state, block);
+  let resumeEdgeId: string | undefined;
+  if (resumeTo) {
+    const virtualEdgeMetadata = addVirtualEdge(state, {
+      to: resumeTo,
+    });
+    newSessionState = virtualEdgeMetadata.newSessionState;
+    resumeEdgeId = virtualEdgeMetadata.edgeId;
+  }
 
-  const resumeEdge = createResumeEdgeIfNecessary(state, block);
-
-  const currentTypebotWithResumeEdge = resumeEdge
-    ? {
-        ...currentTypebotInQueue,
-        typebot: {
-          ...currentTypebotInQueue.typebot,
-          edges: [...currentTypebotInQueue.typebot.edges, resumeEdge],
-        },
-      }
-    : currentTypebotInQueue;
-
-  const shouldMergeResults =
-    currentTypebotInQueue.typebot.version === "6"
-      ? (block.options?.mergeResults ?? defaultTypebotLinkOptions.mergeResults)
-      : block.options?.mergeResults !== false;
+  const shouldMergeResults = isTypebotVersionAtLeastV6(
+    newSessionState.typebotsQueue[0].typebot.version,
+  )
+    ? (block.options?.mergeResults ?? defaultTypebotLinkOptions.mergeResults)
+    : block.options?.mergeResults !== false;
 
   if (
-    currentTypebotInQueue.resultId &&
-    currentTypebotInQueue.answers.length === 0
+    newSessionState.typebotsQueue[0].resultId &&
+    newSessionState.typebotsQueue[0].answers.length === 0
   ) {
     await createResultIfNotExist({
-      resultId: currentTypebotInQueue.resultId,
-      typebot: currentTypebotInQueue.typebot,
+      resultId: newSessionState.typebotsQueue[0].resultId,
+      typebot: newSessionState.typebotsQueue[0].typebot,
       hasStarted: false,
       isCompleted: false,
     });
   }
 
-  const isPreview = isNotDefined(currentTypebotInQueue.resultId);
+  const isPreview = isNotDefined(newSessionState.typebotsQueue[0].resultId);
+  const edgeIdToQueue = block.outgoingEdgeId ?? resumeEdgeId;
   return {
     ...state,
     typebotsQueue: [
@@ -157,28 +170,30 @@ const addLinkedTypebotToState = async (
           ...linkedTypebot,
           variables: fillVariablesWithExistingValues(
             linkedTypebot.variables,
-            state.typebotsQueue,
+            newSessionState.typebotsQueue,
           ),
         },
         resultId: isPreview
           ? undefined
           : shouldMergeResults
-            ? currentTypebotInQueue.resultId
+            ? newSessionState.typebotsQueue[0].resultId
             : createId(),
-        edgeIdToTriggerWhenDone: block.outgoingEdgeId ?? resumeEdge?.id,
-        answers: shouldMergeResults ? currentTypebotInQueue.answers : [],
+        queuedEdgeIds: edgeIdToQueue ? [edgeIdToQueue] : undefined,
+        answers: shouldMergeResults
+          ? newSessionState.typebotsQueue[0].answers
+          : [],
         isMergingWithParent: shouldMergeResults,
       },
-      currentTypebotWithResumeEdge,
-      ...state.typebotsQueue.slice(1),
+      newSessionState.typebotsQueue[0],
+      ...newSessionState.typebotsQueue.slice(1),
     ],
   };
 };
 
-const createResumeEdgeIfNecessary = (
+const getResumeEdgeToProps = (
   state: SessionState,
   block: TypebotLinkBlock,
-): Edge | undefined => {
+): Edge["to"] | undefined => {
   const currentTypebotInQueue = state.typebotsQueue[0];
   const blockId = block.id;
   if (block.outgoingEdgeId) return;
@@ -195,14 +210,8 @@ const createResumeEdgeIfNecessary = (
       : currentGroup.blocks[currentBlockIndex + 1];
   if (!nextBlockInGroup) return;
   return {
-    id: createId(),
-    from: {
-      blockId: "",
-    },
-    to: {
-      groupId: currentGroup.id,
-      blockId: nextBlockInGroup.id,
-    },
+    groupId: currentGroup.id,
+    blockId: nextBlockInGroup.id,
   };
 };
 
@@ -229,7 +238,7 @@ const fetchTypebot = async (state: SessionState, typebotId: string) => {
   const isPreview = !resultId;
   if (isPreview) {
     const typebot = await prisma.typebot.findUnique({
-      where: { id: typebotId },
+      where: { id: typebotId, workspaceId: state.workspaceId },
       select: {
         version: true,
         id: true,
@@ -237,12 +246,21 @@ const fetchTypebot = async (state: SessionState, typebotId: string) => {
         groups: true,
         variables: true,
         events: true,
+        settings: true,
       },
     });
-    return typebotInSessionStateSchema.parse(typebot);
+    if (!typebot) return null;
+    return typebotInSessionStateSchema.parse({
+      ...typebot,
+      systemMessages: settingsSchema.parse(typebot.settings).general
+        ?.systemMessages,
+    });
   }
   const typebot = await prisma.publicTypebot.findUnique({
-    where: { typebotId },
+    where: {
+      typebotId,
+      typebot: { workspaceId: state.workspaceId },
+    },
     select: {
       version: true,
       id: true,
@@ -250,27 +268,45 @@ const fetchTypebot = async (state: SessionState, typebotId: string) => {
       groups: true,
       variables: true,
       events: true,
+      settings: true,
     },
   });
   if (!typebot) return null;
   return typebotInSessionStateSchema.parse({
     ...typebot,
     id: typebotId,
+    systemMessages: settingsSchema.parse(typebot.settings).general
+      ?.systemMessages,
   });
 };
 
 const getNextGroupId = (
-  groupId: string | undefined,
-  typebot: TypebotInSession,
+  groupIdOrVariable: string | undefined,
+  {
+    nextTypebot,
+    state,
+    sessionStore,
+  }: {
+    nextTypebot: TypebotInSession;
+    state: SessionState;
+    sessionStore: SessionStore;
+  },
 ) => {
-  if (groupId) return groupId;
-  if (typebot.version === "6") {
-    const startEdge = typebot.edges.find(
-      byId(typebot.events[0].outgoingEdgeId),
+  if (isSingleVariable(groupIdOrVariable)) {
+    const groupTitle = parseVariables(groupIdOrVariable, {
+      variables: state.typebotsQueue[0].typebot.variables,
+      sessionStore,
+    });
+    return nextTypebot.groups.find((group) => group.title === groupTitle)?.id;
+  }
+  if (groupIdOrVariable) return groupIdOrVariable;
+  if (isTypebotInSessionAtLeastV6(nextTypebot)) {
+    const startEdge = nextTypebot.edges.find(
+      byId(nextTypebot.events[0].outgoingEdgeId),
     );
     return startEdge?.to.groupId;
   }
-  return typebot.groups.find((group) =>
+  return nextTypebot.groups.find((group) =>
     group.blocks.some((block) => block.type === "start"),
   )?.id;
 };

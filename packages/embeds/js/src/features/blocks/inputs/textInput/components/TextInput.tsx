@@ -7,14 +7,14 @@ import { Textarea } from "@/components/inputs/Textarea";
 import type { CommandData } from "@/features/commands/types";
 import type { Attachment, BotContext, InputSubmitContent } from "@/types";
 import { guessApiHost } from "@/utils/guessApiHost";
-import { isMobile } from "@/utils/isMobileSignal";
 import { toaster } from "@/utils/toaster";
 import { fixWebmDuration } from "@fix-webm-duration/fix";
 import { defaultTextInputOptions } from "@typebot.io/blocks-inputs/text/constants";
 import type { TextInputBlock } from "@typebot.io/blocks-inputs/text/schema";
 import { getRuntimeVariable } from "@typebot.io/env/getRuntimeVariable";
+import { guessDeviceIsMobile } from "@typebot.io/lib/guessDeviceIsMobile";
 import { isDefined } from "@typebot.io/lib/utils";
-import clsx from "clsx";
+import { cx } from "@typebot.io/ui/lib/cva";
 import {
   For,
   Match,
@@ -64,7 +64,7 @@ export const TextInput = (props: Props) => {
       let attachments: Attachment[] | undefined;
       if (selectedFiles().length > 0) {
         setUploadProgress(undefined);
-        const urls = await uploadFiles({
+        const result = await uploadFiles({
           apiHost:
             props.context.apiHost ?? guessApiHost({ ignoreChatApiUrl: true }),
           files: selectedFiles().map((file) => ({
@@ -77,7 +77,13 @@ export const TextInput = (props: Props) => {
           })),
           onUploadProgress: setUploadProgress,
         });
-        attachments = urls
+        if (result.type === "error") {
+          toaster.create({
+            description: result.error,
+          });
+          return;
+        }
+        attachments = result.urls
           ?.map((urls, index) =>
             urls
               ? {
@@ -107,7 +113,7 @@ export const TextInput = (props: Props) => {
   };
 
   onMount(() => {
-    if (!isMobile() && inputRef)
+    if (!guessDeviceIsMobile() && inputRef)
       inputRef.focus({
         preventScroll: true,
       });
@@ -147,12 +153,16 @@ export const TextInput = (props: Props) => {
           params: {
             sizeLimit: getRuntimeVariable(
               "NEXT_PUBLIC_BOT_FILE_UPLOAD_MAX_SIZE",
-            ),
+            )
+              ? Number(
+                  getRuntimeVariable("NEXT_PUBLIC_BOT_FILE_UPLOAD_MAX_SIZE"),
+                )
+              : undefined,
           },
-          onError: ({ description, title }) => {
+          context: props.context,
+          onError: ({ description }) => {
             toaster.create({
               description,
-              title,
             });
           },
         }),
@@ -210,25 +220,28 @@ export const TextInput = (props: Props) => {
       );
 
       setUploadProgress(undefined);
-      const urls = (
-        await uploadFiles({
-          apiHost:
-            props.context.apiHost ?? guessApiHost({ ignoreChatApiUrl: true }),
-          files: [
-            {
-              file: audioFile,
-              input: {
-                blockId: props.block.id,
-                sessionId: props.context.sessionId,
-                fileName: audioFile.name,
-              },
+      const result = await uploadFiles({
+        apiHost:
+          props.context.apiHost ?? guessApiHost({ ignoreChatApiUrl: true }),
+        files: [
+          {
+            file: audioFile,
+            input: {
+              blockId: props.block.id,
+              sessionId: props.context.sessionId,
+              fileName: audioFile.name,
             },
-          ],
-          onUploadProgress: setUploadProgress,
-        })
-      )
-        .filter(isDefined)
-        .map((url) => url.url);
+          },
+        ],
+        onUploadProgress: setUploadProgress,
+      });
+      if (result.type === "error") {
+        toaster.create({
+          description: result.error,
+        });
+        return;
+      }
+      const urls = result.urls.filter(isDefined).map((url) => url.url);
       props.onSubmit({
         type: "recording",
         url: urls[0],
@@ -248,7 +261,7 @@ export const TextInput = (props: Props) => {
 
   return (
     <div
-      class={clsx(
+      class={cx(
         "typebot-input-form flex w-full gap-2 items-end",
         props.block.options?.isLong && recordingStatus() !== "started"
           ? "max-w-full"
@@ -260,7 +273,7 @@ export const TextInput = (props: Props) => {
       onDragLeave={handleDragLeave}
     >
       <div
-        class={clsx(
+        class={cx(
           "relative typebot-input flex-col w-full",
           isDraggingOver() && "filter brightness-95",
         )}
@@ -268,13 +281,14 @@ export const TextInput = (props: Props) => {
         <VoiceRecorder
           recordingStatus={recordingStatus()}
           buttonsTheme={props.context.typebot.theme.chat?.buttons}
+          context={props.context}
           onRecordingConfirmed={handleRecordingConfirmed}
           onAbortRecording={handleRecordingAbort}
         />
         <Show when={recordingStatus() !== "started"}>
           <Show when={selectedFiles().length}>
             <div
-              class="p-2 flex gap-2 border-gray-100 overflow-auto"
+              class="p-2 flex gap-2 border-input-border overflow-auto"
               style={{ "border-bottom-width": "1px" }}
             >
               <For each={selectedFiles()}>
@@ -297,7 +311,7 @@ export const TextInput = (props: Props) => {
             </div>
           </Show>
           <div
-            class={clsx(
+            class={cx(
               "flex justify-between px-2",
               props.block.options?.isLong ? "items-end" : "items-center",
             )}
@@ -308,6 +322,7 @@ export const TextInput = (props: Props) => {
                 onInput={handleInput}
                 onKeyDown={submitIfCtrlEnter}
                 value={inputValue()}
+                inputmode={props.block.options?.inputMode}
                 placeholder={
                   props.block.options?.labels?.placeholder ??
                   defaultTextInputOptions.labels.placeholder
@@ -318,6 +333,7 @@ export const TextInput = (props: Props) => {
                 ref={inputRef as HTMLInputElement}
                 onInput={handleInput}
                 value={inputValue()}
+                inputmode={props.block.options?.inputMode}
                 placeholder={
                   props.block.options?.labels?.placeholder ??
                   defaultTextInputOptions.labels.placeholder
@@ -333,7 +349,7 @@ export const TextInput = (props: Props) => {
             >
               <TextInputAddFileButton
                 onNewFiles={onNewFiles}
-                class={clsx(props.block.options?.isLong ? "ml-2" : undefined)}
+                class={cx(props.block.options?.isLong ? "ml-2" : undefined)}
               />
             </Show>
           </div>

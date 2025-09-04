@@ -7,7 +7,9 @@ import { toaster } from "@/utils/toaster";
 import { defaultFileInputOptions } from "@typebot.io/blocks-inputs/file/constants";
 import type { FileInputBlock } from "@typebot.io/blocks-inputs/file/schema";
 import { isDefined } from "@typebot.io/lib/utils";
+import { defaultSystemMessages } from "@typebot.io/settings/constants";
 import { For, Match, Show, Switch, createSignal } from "solid-js";
+import { injectAndroidCameraCaptureToMimeTypes } from "../helpers/injectAndroidCameraCaptureToMimeTypes";
 import { sanitizeNewFile } from "../helpers/sanitizeSelectedFiles";
 import { uploadFiles } from "../helpers/uploadFiles";
 import { SelectedFile } from "./SelectedFile";
@@ -25,6 +27,10 @@ export const FileUploadForm = (props: Props) => {
   const [uploadProgressPercent, setUploadProgressPercent] = createSignal(0);
   const [isDraggingOver, setIsDraggingOver] = createSignal(false);
 
+  const fileUploadErrorMessage =
+    props.context.typebot.settings.general?.systemMessages?.fileUploadError ??
+    defaultSystemMessages.fileUploadError;
+
   const onNewFiles = (files: FileList) => {
     const newFiles = Array.from(files)
       .map((file) =>
@@ -37,9 +43,9 @@ export const FileUploadForm = (props: Props) => {
                 ? props.block.options.sizeLimit
                 : undefined,
           },
-          onError: ({ description, title }) =>
+          context: props.context,
+          onError: ({ description }) =>
             toaster.create({
-              title,
               description,
             }),
         }),
@@ -62,7 +68,7 @@ export const FileUploadForm = (props: Props) => {
 
   const startSingleFileUpload = async (file: File) => {
     setIsUploading(true);
-    const urls = await uploadFiles({
+    const result = await uploadFiles({
       apiHost:
         props.context.apiHost ?? guessApiHost({ ignoreChatApiUrl: true }),
       files: [
@@ -77,63 +83,65 @@ export const FileUploadForm = (props: Props) => {
       ],
     });
     setIsUploading(false);
-    if (urls.length && urls[0])
+    if (result.type === "success" && result.urls.length && result.urls[0])
       return props.onSubmit({
         type: "text",
         label:
           props.block.options?.labels?.success?.single ??
           defaultFileInputOptions.labels.success.single,
-        value: urls[0] ? encodeUrl(urls[0].url) : "",
+        value: result.urls[0] ? encodeUrl(result.urls[0].url) : "",
         attachments: [
           {
             type: file.type,
-            url: urls[0]!.url,
+            url: result.urls[0]!.url,
             blobUrl: URL.createObjectURL(file),
           },
         ],
       });
-    toaster.create({
-      description: "An error occured while uploading the file",
-    });
+    if (result.type === "error")
+      toaster.create({
+        title: fileUploadErrorMessage,
+        description: result.error,
+      });
   };
+
   const startFilesUpload = async (files: File[]) => {
     setIsUploading(true);
-    const urls = await uploadFiles({
+    const result = await uploadFiles({
       apiHost:
         props.context.apiHost ?? guessApiHost({ ignoreChatApiUrl: true }),
-      files: files.map((file, index) => ({
-        file: file,
+      files: files.map((file) => ({
+        file,
         input: {
           sessionId: props.context.sessionId,
           blockId: props.block.id,
-          fileName: files.some((f) => f.name === file.name)
-            ? file.name + `-${index}`
-            : file.name,
+          fileName: file.name,
         },
       })),
       onUploadProgress: setUploadProgressPercent,
     });
     setIsUploading(false);
     setUploadProgressPercent(0);
-    if (urls.length !== files.length)
+    if (result.type === "error")
       return toaster.create({
-        description: "An error occured while uploading the files",
+        title: fileUploadErrorMessage,
+        description: result.error,
       });
     props.onSubmit({
       type: "text",
       label:
-        urls.length > 1
+        result.urls.length > 1
           ? (
               props.block.options?.labels?.success?.multiple ??
               defaultFileInputOptions.labels.success.multiple
-            ).replaceAll("{total}", urls.length.toString())
+            ).replaceAll("{total}", result.urls.length.toString())
           : (props.block.options?.labels?.success?.single ??
             defaultFileInputOptions.labels.success.single),
-      value: urls
+      value: result.urls
         .filter(isDefined)
         .map(({ url }) => encodeUrl(url))
         .join(", "),
-      attachments: urls
+      attachments: result.urls
         .map((urls, index) =>
           urls
             ? {
@@ -234,6 +242,13 @@ export const FileUploadForm = (props: Props) => {
                 id="dropzone-file"
                 type="file"
                 class="hidden"
+                accept={
+                  props.block.options?.allowedFileTypes?.isEnabled
+                    ? injectAndroidCameraCaptureToMimeTypes(
+                        props.block.options.allowedFileTypes.types,
+                      )
+                    : undefined
+                }
                 multiple={
                   props.block.options?.isMultipleAllowed ??
                   defaultFileInputOptions.isMultipleAllowed
@@ -241,6 +256,7 @@ export const FileUploadForm = (props: Props) => {
                 onChange={(e) => {
                   if (!e.currentTarget.files) return;
                   onNewFiles(e.currentTarget.files);
+                  e.currentTarget.value = "";
                 }}
               />
             </>

@@ -1,5 +1,4 @@
 import { BubbleBlockType } from "@typebot.io/blocks-bubbles/constants";
-import type { Block } from "@typebot.io/blocks-core/schemas/schema";
 import {
   type chatCompletionMessageRoles,
   defaultOpenAIOptions,
@@ -8,15 +7,16 @@ import type {
   ChatCompletionOpenAIOptions,
   OpenAICredentials,
 } from "@typebot.io/blocks-integrations/openai/schema";
-import { decrypt } from "@typebot.io/lib/api/encryption/decrypt";
-import { byId, isEmpty } from "@typebot.io/lib/utils";
-import prisma from "@typebot.io/prisma";
-import type { Prisma } from "@typebot.io/prisma/types";
-import { parseVariableNumber } from "@typebot.io/variables/parseVariableNumber";
 import type {
   SessionState,
   TypebotInSession,
-} from "../../../../schemas/chatSession";
+} from "@typebot.io/chat-session/schemas";
+import { decrypt } from "@typebot.io/credentials/decrypt";
+import { getCredentials } from "@typebot.io/credentials/getCredentials";
+import { isEmpty } from "@typebot.io/lib/utils";
+import type { SessionStore } from "@typebot.io/runtime-session-store";
+import { parseVariableNumber } from "@typebot.io/variables/parseVariableNumber";
+import { getNextBlock } from "../../../../getNextBlock";
 import type { ExecuteIntegrationResponse } from "../../../../types";
 import { updateVariablesInSession } from "../../../../updateVariablesInSession";
 import { executeChatCompletionOpenAIRequest } from "./executeChatCompletionOpenAIRequest";
@@ -29,10 +29,12 @@ export const createChatCompletionOpenAI = async (
     outgoingEdgeId,
     options,
     blockId,
+    sessionStore,
   }: {
     outgoingEdgeId?: string;
     options: ChatCompletionOpenAIOptions;
     blockId: string;
+    sessionStore: SessionStore;
   },
 ): Promise<ExecuteIntegrationResponse> => {
   let newSessionState = state;
@@ -47,11 +49,10 @@ export const createChatCompletionOpenAI = async (
       logs: [noCredentialsError],
     };
   }
-  const credentials = await prisma.credentials.findUnique({
-    where: {
-      id: options.credentialsId,
-    },
-  });
+  const credentials = await getCredentials(
+    options.credentialsId,
+    state.workspaceId,
+  );
   if (!credentials) {
     console.error("Could not find credentials in database");
     return { outgoingEdgeId, logs: [noCredentialsError] };
@@ -65,7 +66,7 @@ export const createChatCompletionOpenAI = async (
 
   const { variablesTransformedToList, messages } = parseChatCompletionMessages(
     typebot.variables,
-  )(options.messages);
+  )(options.messages, { sessionStore });
   if (variablesTransformedToList.length > 0)
     newSessionState = updateVariablesInSession({
       state,
@@ -73,8 +74,9 @@ export const createChatCompletionOpenAI = async (
       currentBlockId: undefined,
     }).updatedState;
 
-  const temperature = parseVariableNumber(typebot.variables)(
+  const temperature = parseVariableNumber(
     options.advancedSettings?.temperature,
+    { variables: typebot.variables, sessionStore },
   );
 
   const assistantMessageVariableName = typebot.variables.find(
@@ -125,7 +127,11 @@ export const createChatCompletionOpenAI = async (
       logs,
     };
   const messageContent = chatCompletion.choices.at(0)?.message?.content;
-  const totalTokens = chatCompletion.usage?.total_tokens;
+  const tokens = {
+    totalTokens: chatCompletion.usage?.total_tokens,
+    promptTokens: chatCompletion.usage?.prompt_tokens,
+    completionTokens: chatCompletion.usage?.completion_tokens,
+  };
   if (isEmpty(messageContent)) {
     console.error(
       "OpenAI block returned empty message",
@@ -138,7 +144,7 @@ export const createChatCompletionOpenAI = async (
       options,
       outgoingEdgeId,
       logs,
-    })(messageContent, totalTokens)),
+    })(messageContent, tokens)),
     startTimeShouldBeUpdated: true,
   };
 };
@@ -147,7 +153,10 @@ const isNextBubbleMessageWithAssistantMessage =
   (typebot: TypebotInSession) =>
   (blockId: string, assistantVariableName?: string): boolean => {
     if (!assistantVariableName) return false;
-    const nextBlock = getNextBlock(typebot)(blockId);
+    const nextBlock = getNextBlock(blockId, {
+      groups: typebot.groups,
+      edges: typebot.edges,
+    });
     if (!nextBlock) return false;
     return (
       nextBlock.type === BubbleBlockType.TEXT &&
@@ -156,29 +165,3 @@ const isNextBubbleMessageWithAssistantMessage =
         `{{${assistantVariableName}}}`
     );
   };
-
-const getNextBlock =
-  (typebot: TypebotInSession) =>
-  (blockId: string): Block | undefined => {
-    const group = typebot.groups.find((group) =>
-      group.blocks.find(byId(blockId)),
-    );
-    if (!group) return;
-    const blockIndex = group.blocks.findIndex(byId(blockId));
-    const nextBlockInGroup = group.blocks.at(blockIndex + 1);
-    if (nextBlockInGroup) return nextBlockInGroup;
-    const outgoingEdgeId = group.blocks.at(blockIndex)?.outgoingEdgeId;
-    if (!outgoingEdgeId) return;
-    const outgoingEdge = typebot.edges.find(byId(outgoingEdgeId));
-    if (!outgoingEdge) return;
-    const connectedGroup = typebot.groups.find(byId(outgoingEdge?.to.groupId));
-    if (!connectedGroup) return;
-    return outgoingEdge.to.blockId
-      ? connectedGroup.blocks.find(
-          (block) => block.id === outgoingEdge.to.blockId,
-        )
-      : connectedGroup?.blocks.at(0);
-  };
-
-const isCredentialsV2 = (credentials: Pick<Prisma.Credentials, "iv">) =>
-  credentials.iv.length === 24;

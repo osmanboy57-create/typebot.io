@@ -1,21 +1,19 @@
 import { ImageUploadContent } from "@/components/ImageUploadContent";
 import type { FilePathUploadProps } from "@/features/upload/api/generateUploadUrl";
-import { useOutsideClick } from "@/hooks/useOutsideClick";
+import { useOpenControls } from "@/hooks/useOpenControls";
 import {
   Box,
   Flex,
   HStack,
   Heading,
   Image,
-  Popover,
-  PopoverAnchor,
-  PopoverContent,
-  Portal,
   Stack,
   Switch,
-  useDisclosure,
+  chakra,
 } from "@chakra-ui/react";
+import { isSvgSrc } from "@typebot.io/lib/utils";
 import type { AvatarProps } from "@typebot.io/theme/schemas";
+import { Popover } from "@typebot.io/ui/components/Popover";
 import React from "react";
 import { DefaultAvatar } from "../DefaultAvatar";
 
@@ -34,19 +32,13 @@ export const AvatarForm = ({
   isDefaultCheck = false,
   onAvatarChange,
 }: Props) => {
-  const { isOpen, onOpen, onClose } = useDisclosure();
+  const controls = useOpenControls();
   const isChecked = avatarProps ? avatarProps.isEnabled : isDefaultCheck;
   const handleOnCheck = () =>
     onAvatarChange({ ...avatarProps, isEnabled: !isChecked });
   const handleImageUrl = (url: string) =>
     onAvatarChange({ isEnabled: isChecked, url });
   const popoverContainerRef = React.useRef<HTMLDivElement>(null);
-
-  useOutsideClick({
-    ref: popoverContainerRef,
-    handler: onClose,
-    isEnabled: isOpen,
-  });
 
   const isDefaultAvatar = !avatarProps?.url || avatarProps.url.includes("{{");
   return (
@@ -60,18 +52,26 @@ export const AvatarForm = ({
         </HStack>
         {isChecked && (
           <Flex ref={popoverContainerRef}>
-            <Popover isLazy isOpen={isOpen}>
-              <PopoverAnchor>
+            <Popover.Root {...controls}>
+              <Popover.Trigger>
                 {isDefaultAvatar ? (
-                  <Box onClick={onOpen}>
+                  <Box>
                     <DefaultAvatar
                       cursor="pointer"
                       _hover={{ filter: "brightness(.9)" }}
                     />
                   </Box>
-                ) : (
+                ) : isSvgSrc(avatarProps?.url) ? (
                   <Image
-                    onClick={onOpen}
+                    src={avatarProps.url}
+                    alt="Website image"
+                    cursor="pointer"
+                    _hover={{ filter: "brightness(.9)" }}
+                    transition="filter 200ms"
+                    boxSize="40px"
+                  />
+                ) : avatarProps?.url?.startsWith("http") ? (
+                  <Image
                     src={avatarProps.url}
                     alt="Website image"
                     cursor="pointer"
@@ -81,24 +81,33 @@ export const AvatarForm = ({
                     boxSize="40px"
                     objectFit="cover"
                   />
+                ) : (
+                  <chakra.span
+                    fontSize="40px"
+                    lineHeight="1"
+                    cursor="pointer"
+                    _hover={{ filter: "brightness(.9)" }}
+                    transition="filter 200ms"
+                  >
+                    {avatarProps?.url}
+                  </chakra.span>
                 )}
-              </PopoverAnchor>
-              <Portal>
-                <PopoverContent
-                  p="4"
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  w="500px"
-                >
-                  <ImageUploadContent
-                    uploadFileProps={uploadFileProps}
-                    defaultUrl={avatarProps?.url}
-                    imageSize="thumb"
-                    onSubmit={handleImageUrl}
-                  />
-                </PopoverContent>
-              </Portal>
-            </Popover>
+              </Popover.Trigger>
+              <Popover.Popup className="w-[500px]">
+                <ImageUploadContent
+                  uploadFileProps={uploadFileProps}
+                  defaultUrl={avatarProps?.url}
+                  imageSize="thumb"
+                  onSubmit={handleImageUrl}
+                  additionalTabs={{
+                    emoji: true,
+                    giphy: true,
+                    unsplash: true,
+                    icon: true,
+                  }}
+                />
+              </Popover.Popup>
+            </Popover.Root>
           </Flex>
         )}
       </Flex>

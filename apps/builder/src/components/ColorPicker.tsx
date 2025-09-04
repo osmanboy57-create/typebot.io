@@ -1,21 +1,13 @@
-import {
-  Box,
-  Button,
-  type ButtonProps,
-  Center,
-  Input,
-  Popover,
-  PopoverArrow,
-  PopoverBody,
-  PopoverCloseButton,
-  PopoverContent,
-  PopoverHeader,
-  PopoverTrigger,
-  SimpleGrid,
-  Stack,
-} from "@chakra-ui/react";
+import { useOpenControls } from "@/hooks/useOpenControls";
+import { Box, Center, Input, SimpleGrid, Stack } from "@chakra-ui/react";
 import { useTranslate } from "@tolgee/react";
-import React, { useState } from "react";
+import {
+  type ButtonProps,
+  buttonVariants,
+} from "@typebot.io/ui/components/Button";
+import { Popover } from "@typebot.io/ui/components/Popover";
+import type React from "react";
+import { useState } from "react";
 import tinyColor from "tinycolor2";
 import { useDebouncedCallback } from "use-debounce";
 
@@ -37,17 +29,20 @@ type Props = {
   defaultValue?: string;
   isDisabled?: boolean;
   onColorChange: (color: string) => void;
+  side?: "top" | "bottom" | "left" | "right";
 };
 
 export const ColorPicker = ({
   value,
   defaultValue,
   isDisabled,
+  side = "right",
   onColorChange,
 }: Props) => {
   const { t } = useTranslate();
   const [color, setColor] = useState(defaultValue ?? "");
   const displayedValue = value ?? color;
+  const controls = useOpenControls();
 
   const handleColorChange = (color: string) => {
     setColor(color);
@@ -60,46 +55,39 @@ export const ColorPicker = ({
   };
 
   return (
-    <Popover variant="picker" placement="right" isLazy>
-      <PopoverTrigger>
-        <Button
-          aria-label={t("colorPicker.pickColor.ariaLabel")}
-          height="22px"
-          width="22px"
-          padding={0}
-          borderRadius={3}
-          borderWidth={1}
-          isDisabled={isDisabled}
-        >
-          <Box rounded="full" boxSize="14px" bgColor={displayedValue} />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent width="170px">
-        <PopoverArrow />
-        <PopoverCloseButton color="white" />
-        <PopoverHeader
-          height="100px"
-          backgroundColor={displayedValue}
-          borderTopLeftRadius={5}
-          borderTopRightRadius={5}
-          color={tinyColor(displayedValue).isLight() ? "gray.800" : "white"}
+    <Popover.Root {...controls}>
+      <Popover.TriggerButton
+        aria-label={t("colorPicker.pickColor.ariaLabel")}
+        variant="secondary"
+        size="icon"
+        className="min-w-0 rounded-md border-1"
+        disabled={isDisabled}
+      >
+        <Box rounded="full" boxSize="14px" bgColor={displayedValue} />
+      </Popover.TriggerButton>
+      <Popover.Popup className="p-0 max-w-48" side={side}>
+        <div
+          className="h-24"
+          style={{
+            backgroundColor: displayedValue,
+            color: tinyColor(displayedValue).isLight() ? "gray.900" : "white",
+          }}
         >
           <Center height="100%">{displayedValue}</Center>
-        </PopoverHeader>
-        <PopoverBody as={Stack}>
+        </div>
+        <Stack p="2">
           <SimpleGrid columns={5} spacing={2}>
             {colorsSelection.map((color) => (
-              <Button
+              <button
                 key={color}
                 aria-label={color}
-                background={color}
-                height="22px"
-                width="22px"
-                padding={0}
-                minWidth="unset"
-                borderRadius={3}
-                borderWidth={color === "#FFFFFF" ? 1 : undefined}
-                _hover={{ background: color }}
+                style={
+                  {
+                    "--bg": color,
+                    "--border-width": color === "#FFFFFF" ? "1px" : "0px",
+                  } as React.CSSProperties
+                }
+                className="h-5 w-5 p-0 min-w-0 rounded-md border-[length:var(--border-width)] bg-[var(--bg)] hover:bg-[var(--bg)]"
                 onClick={handleClick(color)}
               />
             ))}
@@ -120,15 +108,17 @@ export const ColorPicker = ({
           >
             {t("colorPicker.advancedColors")}
           </NativeColorPicker>
-        </PopoverBody>
-      </PopoverContent>
-    </Popover>
+        </Stack>
+      </Popover.Popup>
+    </Popover.Root>
   );
 };
 
 const NativeColorPicker = ({
   color,
   onColorChange,
+  variant,
+  size,
   ...props
 }: {
   color: string;
@@ -140,9 +130,12 @@ const NativeColorPicker = ({
 
   return (
     <>
-      <Button as="label" htmlFor="native-picker" {...props}>
+      <label
+        htmlFor="native-picker"
+        className={buttonVariants({ variant, size })}
+      >
         {props.children}
-      </Button>
+      </label>
       <Input
         type="color"
         display="none"

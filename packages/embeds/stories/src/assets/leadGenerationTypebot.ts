@@ -1,7 +1,7 @@
 import { BubbleBlockType } from "@typebot.io/blocks-bubbles/constants";
 import { InputBlockType } from "@typebot.io/blocks-inputs/constants";
 import { LogicBlockType } from "@typebot.io/blocks-logic/constants";
-import type { StartTypebot } from "@typebot.io/bot-engine/schemas/api";
+import type { StartTypebot } from "@typebot.io/chat-api/schemas";
 import {
   ComparisonOperators,
   LogicalOperator,
@@ -13,6 +13,7 @@ export const leadGenerationTypebot: StartTypebot = {
   id: "clckrl4q5000t3b6sabwokaar",
   events: null,
   updatedAt: new Date(),
+  workspaceId: "",
   groups: [
     {
       id: "clckrl4q5000g3b6skizhd262",

@@ -4,31 +4,32 @@ import type {
   RecordingInputSubmitContent,
   TextInputSubmitContent,
 } from "@/types";
-import { isMobile } from "@/utils/isMobileSignal";
 import { isNotEmpty } from "@typebot.io/lib/utils";
-import clsx from "clsx";
+import {
+  defaultGuestAvatarIsEnabled,
+  defaultHostAvatarIsEnabled,
+} from "@typebot.io/theme/constants";
+import { isChatContainerLight } from "@typebot.io/theme/helpers/isChatContainerLight";
+import type { Theme } from "@typebot.io/theme/schemas";
+import { cx } from "@typebot.io/ui/lib/cva";
 import { For, Match, Show, Switch, createSignal } from "solid-js";
 import { Modal } from "../Modal";
 import { Avatar } from "../avatars/Avatar";
 
 type Props = {
   answer?: InputSubmitContent;
-  showAvatar: boolean;
-  avatarSrc?: string;
-  hasHostAvatar: boolean;
+  theme: Theme;
 };
 
 export const GuestBubble = (props: Props) => {
   return (
     <div
-      class="flex justify-end items-end animate-fade-in gap-2 guest-container"
-      style={{
-        "margin-left": props.hasHostAvatar
-          ? isMobile()
-            ? "28px"
-            : "50px"
-          : undefined,
-      }}
+      class={cx(
+        "flex justify-end items-end animate-fade-in gap-2 guest-container",
+        (props.theme.chat?.hostAvatar?.isEnabled ??
+          defaultHostAvatarIsEnabled) &&
+          "ml-7 @xs:ml-[50px]",
+      )}
     >
       <Switch>
         <Match when={props.answer?.type === "text"}>
@@ -41,8 +42,19 @@ export const GuestBubble = (props: Props) => {
         </Match>
       </Switch>
 
-      <Show when={props.showAvatar}>
-        <Avatar initialAvatarSrc={props.avatarSrc} />
+      <Show
+        when={
+          props.theme.chat?.guestAvatar?.isEnabled ??
+          defaultGuestAvatarIsEnabled
+        }
+      >
+        <Avatar
+          src={props.theme.chat?.guestAvatar?.url}
+          isChatContainerLight={isChatContainerLight({
+            chatContainer: props.theme.chat?.container,
+            generalBackground: props.theme.general?.background,
+          })}
+        />
       </Show>
     </div>
   );
@@ -54,12 +66,7 @@ const TextGuestBubble = (props: { answer: TextInputSubmitContent }) => {
   return (
     <div class="flex flex-col gap-1 items-end">
       <Show when={(props.answer.attachments ?? []).length > 0}>
-        <div
-          class={clsx(
-            "flex gap-1 overflow-auto max-w-[350px]",
-            isMobile() ? "flex-wrap justify-end" : "items-center",
-          )}
-        >
+        <div class="flex gap-1 overflow-auto max-w-[350px] flex-wrap justify-end @xs:items-center @xs:flex-nowrap">
           <For
             each={props.answer.attachments?.filter((attachment) =>
               attachment.type.startsWith("image"),
@@ -69,7 +76,7 @@ const TextGuestBubble = (props: { answer: TextInputSubmitContent }) => {
               <img
                 src={attachment.blobUrl ?? attachment.url}
                 alt={`Attached image ${idx() + 1}`}
-                class={clsx(
+                class={cx(
                   "typebot-guest-bubble-image-attachment cursor-pointer",
                   props.answer.attachments!.filter((attachment) =>
                     attachment.type.startsWith("image"),
@@ -82,12 +89,7 @@ const TextGuestBubble = (props: { answer: TextInputSubmitContent }) => {
             )}
           </For>
         </div>
-        <div
-          class={clsx(
-            "flex gap-1 overflow-auto max-w-[350px]",
-            isMobile() ? "flex-wrap justify-end" : "items-center",
-          )}
-        >
+        <div class="flex gap-1 overflow-auto max-w-[350px] flex-wrap justify-end @xs:items-center @xs:flex-nowrap">
           <For
             each={props.answer.attachments?.filter(
               (attachment) => !attachment.type.startsWith("image"),
@@ -120,7 +122,7 @@ const TextGuestBubble = (props: { answer: TextInputSubmitContent }) => {
         <img
           src={clickedImageSrc()}
           alt="Attachment"
-          style={{ "border-radius": "6px" }}
+          class="max-h-[calc(100vh-1rem)] max-w-[calc(100%-1rem)] rounded-[6px] m-auto"
         />
       </Modal>
     </div>

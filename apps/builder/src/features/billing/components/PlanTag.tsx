@@ -3,12 +3,13 @@ import { Plan } from "@typebot.io/prisma/enum";
 
 export const planColorSchemes: Record<Plan, ThemeTypings["colorSchemes"]> = {
   [Plan.LIFETIME]: "purple",
-  [Plan.PRO]: "blue",
+  [Plan.PRO]: "purple",
   [Plan.OFFERED]: "orange",
   [Plan.STARTER]: "orange",
   [Plan.FREE]: "gray",
   [Plan.CUSTOM]: "yellow",
   [Plan.UNLIMITED]: "yellow",
+  [Plan.ENTERPRISE]: "yellow",
 };
 
 export const PlanTag = ({
@@ -80,6 +81,13 @@ export const PlanTag = ({
           {...props}
         >
           Unlimited
+        </Tag>
+      );
+    }
+    case Plan.ENTERPRISE: {
+      return (
+        <Tag colorScheme={planColorSchemes[Plan.ENTERPRISE]} {...props}>
+          Enterprise
         </Tag>
       );
     }

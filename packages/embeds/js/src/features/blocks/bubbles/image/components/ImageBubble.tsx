@@ -1,8 +1,8 @@
+import { Modal } from "@/components/Modal";
 import { TypingBubble } from "@/components/TypingBubble";
-import { isMobile } from "@/utils/isMobileSignal";
 import { defaultImageBubbleContent } from "@typebot.io/blocks-bubbles/image/constants";
 import type { ImageBubbleBlock } from "@typebot.io/blocks-bubbles/image/schema";
-import clsx from "clsx";
+import { cx } from "@typebot.io/ui/lib/cva";
 import { createSignal, onCleanup, onMount } from "solid-js";
 
 type Props = {
@@ -19,6 +19,7 @@ let typingTimeout: NodeJS.Timeout;
 export const ImageBubble = (props: Props) => {
   let ref: HTMLDivElement | undefined;
   let image: HTMLImageElement | undefined;
+  const [isExpanded, setIsExpanded] = createSignal(false);
   const [isTyping, setIsTyping] = createSignal(
     props.onTransitionEnd ? true : false,
   );
@@ -44,6 +45,14 @@ export const ImageBubble = (props: Props) => {
     if (typingTimeout) clearTimeout(typingTimeout);
   });
 
+  const openModal = () => {
+    setIsExpanded(true);
+  };
+
+  const closeModal = () => {
+    setIsExpanded(false);
+  };
+
   const Image = (
     <img
       ref={image}
@@ -51,13 +60,19 @@ export const ImageBubble = (props: Props) => {
       alt={
         props.content?.clickLink?.alt ?? defaultImageBubbleContent.clickLink.alt
       }
-      class={clsx(
+      class={cx(
         isTyping() ? "opacity-0" : "opacity-100",
         props.onTransitionEnd ? "text-fade-in" : undefined,
-        props.content?.url?.endsWith(".svg") ? "w-full" : undefined,
+        // w-full works on Chrome, but not on Firefox. Setting a fixed high width works on all browsers. 🤷‍♂️
+        props.content?.url?.endsWith(".svg") ? "w-96" : undefined,
       )}
       style={{
-        "max-height": "512px",
+        width: props.content?.url?.startsWith("data:image/svg")
+          ? "100%"
+          : undefined,
+        "max-height": props.content?.url?.startsWith("data:image/svg")
+          ? "120px"
+          : "512px",
         height: isTyping() ? "32px" : "auto",
       }}
       elementtiming={"Bubble image"}
@@ -67,7 +82,7 @@ export const ImageBubble = (props: Props) => {
 
   return (
     <div
-      class={clsx(
+      class={cx(
         "flex flex-col",
         props.onTransitionEnd ? "animate-fade-in" : undefined,
       )}
@@ -88,24 +103,38 @@ export const ImageBubble = (props: Props) => {
             <a
               href={props.content.clickLink.url}
               target="_blank"
-              class={clsx("z-10", isTyping() ? "h-8" : "p-4")}
+              class={cx("z-10", isTyping() ? "h-8" : "p-4")}
               rel="noreferrer"
             >
               {Image}
             </a>
           ) : (
             <figure
-              class={clsx(
-                "z-10",
-                !isTyping() && "p-4",
-                isTyping() ? (isMobile() ? "h-8" : "h-9") : "",
+              class={cx(
+                "z-10 cursor-pointer",
+                isTyping() ? "h-8 @xs:h-9" : "p-4",
               )}
+              on:click={
+                props.content?.url?.startsWith("data:image/svg")
+                  ? undefined
+                  : openModal
+              }
             >
               {Image}
             </figure>
           )}
         </div>
       </div>
+      <Modal isOpen={isExpanded()} onClose={closeModal}>
+        <img
+          src={props.content?.url}
+          alt={
+            props.content?.clickLink?.alt ??
+            defaultImageBubbleContent.clickLink.alt
+          }
+          class="max-h-[calc(100vh-1rem)] max-w-[calc(100%-1rem)] rounded-[6px] m-auto"
+        />
+      </Modal>
     </div>
   );
 };

@@ -1,67 +1,57 @@
-import { UserIcon } from "@/components/icons";
+import { BracesIcon } from "@/components/icons";
 import { VariableSearchInput } from "@/components/inputs/VariableSearchInput";
-import { useParentModal } from "@/features/graph/providers/ParentModalProvider";
-import { useOutsideClick } from "@/hooks/useOutsideClick";
-import {
-  Flex,
-  IconButton,
-  type IconButtonProps,
-  Popover,
-  PopoverAnchor,
-  PopoverContent,
-  Portal,
-  Tooltip,
-  useDisclosure,
-} from "@chakra-ui/react";
+import { useOpenControls } from "@/hooks/useOpenControls";
 import { useTranslate } from "@tolgee/react";
+import type { ButtonProps } from "@typebot.io/ui/components/Button";
+import { Popover } from "@typebot.io/ui/components/Popover";
+import { Tooltip } from "@typebot.io/ui/components/Tooltip";
+import { cn } from "@typebot.io/ui/lib/cn";
 import type { Variable } from "@typebot.io/variables/schemas";
-import React, { useRef } from "react";
+import React from "react";
 
 type Props = {
   onSelectVariable: (variable: Pick<Variable, "name" | "id">) => void;
-} & Omit<IconButtonProps, "aria-label">;
+} & ButtonProps;
 
-export const VariablesButton = ({ onSelectVariable, ...props }: Props) => {
+export const VariablesButton = ({
+  onSelectVariable,
+  className,
+  variant = "secondary",
+  ...props
+}: Props) => {
   const { t } = useTranslate();
-  const { isOpen, onOpen, onClose } = useDisclosure();
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const { ref: parentModalRef } = useParentModal();
-
-  useOutsideClick({
-    ref: popoverRef,
-    handler: onClose,
-    isEnabled: isOpen,
-  });
+  const controls = useOpenControls();
 
   return (
-    <Popover isLazy isOpen={isOpen}>
-      <PopoverAnchor>
-        <Flex>
-          <Tooltip label={t("variables.button.tooltip")}>
-            <IconButton
-              aria-label={t("variables.button.tooltip")}
-              icon={<UserIcon />}
-              pos="relative"
-              onClick={onOpen}
-              {...props}
-            />
-          </Tooltip>
-        </Flex>
-      </PopoverAnchor>
-      <Portal containerRef={parentModalRef}>
-        <PopoverContent w="full" ref={popoverRef}>
-          <VariableSearchInput
-            initialVariableId={undefined}
-            onSelectVariable={(variable) => {
-              onClose();
-              if (variable) onSelectVariable(variable);
-            }}
-            placeholder={t("variables.button.searchInput.placeholder")}
-            shadow="lg"
-            autoFocus
-          />
-        </PopoverContent>
-      </Portal>
-    </Popover>
+    <Popover.Root {...controls}>
+      <Popover.Trigger>
+        <Tooltip.Root>
+          <Tooltip.TriggerButton
+            aria-label={t("variables.button.tooltip")}
+            variant={variant}
+            size="icon"
+            className={cn("size-10", className)}
+            {...props}
+          >
+            <BracesIcon />
+          </Tooltip.TriggerButton>
+          <Tooltip.Popup>{t("variables.button.tooltip")}</Tooltip.Popup>
+        </Tooltip.Root>
+      </Popover.Trigger>
+      <Popover.Popup className="w-full p-0">
+        <VariableSearchInput
+          initialVariableId={undefined}
+          onSelectVariable={(variable) => {
+            if (variable) {
+              onSelectVariable(variable);
+              controls.onClose();
+            }
+          }}
+          placeholder={t("variables.button.searchInput.placeholder")}
+          shadow="md"
+          autoFocus
+        />
+      </Popover.Popup>
+    </Popover.Root>
   );
 };

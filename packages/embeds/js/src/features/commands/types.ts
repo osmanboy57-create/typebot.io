@@ -8,11 +8,19 @@ export type CommandData = CommandArgs & {
   isFromTypebot: boolean;
 } & (
     | {
-        command: "open" | "toggle" | "close" | "hidePreviewMessage" | "unmount";
+        command:
+          | "open"
+          | "toggle"
+          | "close"
+          | "hidePreviewMessage"
+          | "unmount"
+          | "reload"
+          | "reset";
       }
     | ShowMessageCommandData
     | SetPrefilledVariablesCommandData
     | SetInputValueCommandData
+    | SendCommandCommandData
   );
 
 export type ShowMessageCommandData = {
@@ -28,4 +36,9 @@ export type SetPrefilledVariablesCommandData = {
 export type SetInputValueCommandData = {
   command: "setInputValue";
   value: string;
+};
+
+export type SendCommandCommandData = {
+  command: "sendCommand";
+  text: string;
 };

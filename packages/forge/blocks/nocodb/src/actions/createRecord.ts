@@ -1,8 +1,9 @@
 import { createAction, option } from "@typebot.io/forge";
-import ky, { HTTPError } from "ky";
+import { parseUnknownError } from "@typebot.io/lib/parseUnknownError";
+import ky from "ky";
 import { auth } from "../auth";
 import { defaultBaseUrl } from "../constants";
-import { parseErrorResponse } from "../helpers/parseErrorResponse";
+import { linkRelationUpdatesIfAny } from "../helpers/linkRelationUpdatesIfAny";
 import { parseRecordsCreateBody } from "../helpers/parseRecordCreateBody";
 
 export const createRecord = createAction({
@@ -39,23 +40,34 @@ export const createRecord = createAction({
     }) => {
       try {
         if (!fields || fields.length === 0) return;
-        await ky.post(
-          `${baseUrl ?? defaultBaseUrl}/api/v2/tables/${tableId}/records`,
-          {
-            headers: {
-              "xc-token": apiKey,
+        if (!apiKey) return logs.add("API key is required");
+        if (!tableId) return logs.add("Table ID is required");
+
+        const response = await ky
+          .post(
+            `${baseUrl ?? defaultBaseUrl}/api/v2/tables/${tableId}/records`,
+            {
+              headers: {
+                "xc-token": apiKey,
+              },
+              json: parseRecordsCreateBody(fields),
             },
-            json: parseRecordsCreateBody(fields),
-          },
-        );
+          )
+          .json<{ Id: number }>();
+        await linkRelationUpdatesIfAny({
+          baseUrl,
+          apiKey,
+          tableId,
+          updates: fields,
+          recordIdsToUpdate: [response.Id],
+        });
       } catch (error) {
-        if (error instanceof HTTPError)
-          return logs.add({
-            status: "error",
-            description: error.message,
-            details: await parseErrorResponse(error.response),
-          });
-        console.error(error);
+        logs.add(
+          await parseUnknownError({
+            err: error,
+            context: "While creating NocoDB record",
+          }),
+        );
       }
     },
   },

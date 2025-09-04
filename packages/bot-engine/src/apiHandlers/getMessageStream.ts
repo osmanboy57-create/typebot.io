@@ -1,22 +1,27 @@
 import { isForgedBlockType } from "@typebot.io/blocks-core/helpers";
 import { IntegrationBlockType } from "@typebot.io/blocks-integrations/constants";
 import type { ChatCompletionOpenAIOptions } from "@typebot.io/blocks-integrations/openai/schema";
+import { getSession } from "@typebot.io/chat-session/queries/getSession";
+import { updateSession } from "@typebot.io/chat-session/queries/updateSession";
+import type { SessionState } from "@typebot.io/chat-session/schemas";
+import { decryptV2 } from "@typebot.io/credentials/decryptV2";
+import { getCredentials } from "@typebot.io/credentials/getCredentials";
 import { forgedBlocks } from "@typebot.io/forge-repository/definitions";
 import type { AsyncVariableStore } from "@typebot.io/forge/types";
-import { getBlockById } from "@typebot.io/groups/helpers";
-import { decryptV2 } from "@typebot.io/lib/api/encryption/decryptV2";
+import { getBlockById } from "@typebot.io/groups/helpers/getBlockById";
+import { parseUnknownError } from "@typebot.io/lib/parseUnknownError";
 import { isDefined } from "@typebot.io/lib/utils";
+import {
+  deleteSessionStore,
+  getSessionStore,
+} from "@typebot.io/runtime-session-store";
 import { deepParseVariables } from "@typebot.io/variables/deepParseVariables";
 import {
   type ParseVariablesOptions,
   parseVariables,
 } from "@typebot.io/variables/parseVariables";
 import { OpenAI } from "openai";
-import { getCredentials } from "../queries/getCredentials";
-import { getSession } from "../queries/getSession";
 import { saveSetVariableHistoryItems } from "../queries/saveSetVariableHistoryItems";
-import { updateSession } from "../queries/updateSession";
-import type { SessionState } from "../schemas/chatSession";
 import { updateVariablesInSession } from "../updateVariablesInSession";
 import { getOpenAIChatCompletionStream } from "./legacy/getOpenAIChatCompletionStream";
 
@@ -32,6 +37,8 @@ export const getMessageStream = async ({
   stream?: ReadableStream<any>;
   status?: number;
   message?: string;
+  details?: string;
+  context?: string;
 }> => {
   const session = await getSession(sessionId);
 
@@ -59,12 +66,14 @@ export const getMessageStream = async ({
       message: "This block does not have options",
     };
 
+  const sessionStore = getSessionStore(sessionId);
   if (block.type === IntegrationBlockType.OPEN_AI && messages) {
     try {
       const stream = await getOpenAIChatCompletionStream(
         newSessionState,
         block.options as ChatCompletionOpenAIOptions,
         messages,
+        sessionStore,
       );
       if (!stream)
         return {
@@ -105,7 +114,10 @@ export const getMessageStream = async ({
   try {
     if (!block.options.credentialsId)
       return { status: 404, message: "Could not find credentials" };
-    const credentials = await getCredentials(block.options.credentialsId);
+    const credentials = await getCredentials(
+      block.options.credentialsId,
+      session.state.workspaceId,
+    );
     if (!credentials)
       return { status: 404, message: "Could not find credentials" };
     const decryptedCredentials = await decryptV2(
@@ -123,10 +135,11 @@ export const getMessageStream = async ({
         return variable?.value;
       },
       parse: (text: string, params?: ParseVariablesOptions) =>
-        parseVariables(
-          newSessionState.typebotsQueue[0].typebot.variables,
-          params,
-        )(text),
+        parseVariables(text, {
+          variables: newSessionState.typebotsQueue[0].typebot.variables,
+          sessionStore,
+          ...params,
+        }),
       set: async (variables) => {
         const newVariables = variables
           .map((variable) => {
@@ -161,29 +174,37 @@ export const getMessageStream = async ({
         });
       },
     };
-    const { stream, httpError } = await action.run.stream.run({
-      credentials: decryptedCredentials,
-      options: deepParseVariables(
-        newSessionState.typebotsQueue[0].typebot.variables,
-      )(block.options),
+    const { stream, error } = await action.run.stream.run({
+      credentials: decryptedCredentials as any,
+      options: deepParseVariables(block.options, {
+        variables: newSessionState.typebotsQueue[0].typebot.variables,
+        sessionStore,
+      }),
       variables,
+      sessionStore,
     });
-    if (httpError) return httpError;
+    deleteSessionStore(sessionId);
+    if (error)
+      return {
+        status: 500,
+        message: error.description,
+        details: error.details,
+        context: error.context,
+      };
 
     if (!stream) return { status: 500, message: "Could not create stream" };
 
     return { stream };
   } catch (error) {
-    if (error instanceof OpenAI.APIError) {
-      const { message } = error;
-      return {
-        status: 500,
-        message,
-      };
-    }
+    const parsedError = await parseUnknownError({
+      err: error,
+      context: "While streaming message",
+    });
     return {
       status: 500,
-      message: "Could not create stream",
+      message: parsedError.description,
+      details: parsedError.details,
+      context: parsedError.context,
     };
   }
 };

@@ -3,7 +3,21 @@ import {
   LogicalOperator,
 } from "@typebot.io/conditions/constants";
 import { z } from "@typebot.io/zod";
-import { rememberUserStorages } from "./constants";
+import { maxTypingEmulationMaxDelay, rememberUserStorages } from "./constants";
+
+export const systemMessagesSchema = z.object({
+  invalidMessage: z.string().optional(),
+  botClosed: z.string().optional(),
+  networkErrorTitle: z.string().optional(),
+  networkErrorMessage: z.string().optional(),
+  popupBlockedTitle: z.string().optional(),
+  popupBlockedDescription: z.string().optional(),
+  popupBlockedButtonLabel: z.string().optional(),
+  fileUploadError: z.string().optional(),
+  fileUploadSizeError: z.string().optional(),
+  whatsAppPictureChoiceSelectLabel: z.string().optional(),
+});
+export type SystemMessages = z.infer<typeof systemMessagesSchema>;
 
 const generalSettings = z.object({
   isBrandingEnabled: z.boolean().optional(),
@@ -17,13 +31,18 @@ const generalSettings = z.object({
       storage: z.enum(rememberUserStorages).optional(),
     })
     .optional(),
+  systemMessages: systemMessagesSchema.optional(),
 });
 
 const typingEmulation = z.object({
   enabled: z.boolean().optional(),
   speed: z.number().optional(),
   maxDelay: z.number().optional(),
-  delayBetweenBubbles: z.number().min(0).max(5).optional(),
+  delayBetweenBubbles: z
+    .number()
+    .min(0)
+    .max(maxTypingEmulationMaxDelay)
+    .optional(),
   isDisabledOnFirstMessage: z.boolean().optional(),
 });
 
@@ -34,10 +53,11 @@ const metadataSchema = z.object({
   favIconUrl: z.string().optional(),
   customHeadCode: z.string().optional(),
   googleTagManagerId: z.string().optional(),
+  allowIndexing: z.boolean().optional(),
 });
 
 const startConditionSchema = z.object({
-  logicalOperator: z.nativeEnum(LogicalOperator),
+  logicalOperator: z.nativeEnum(LogicalOperator).optional(),
   comparisons: z.array(
     z.object({
       id: z.string(),

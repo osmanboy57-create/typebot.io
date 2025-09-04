@@ -25,6 +25,8 @@ export const workspaceInvitationSchema = z.object({
   Omit<Prisma.WorkspaceInvitation, "workspaceId" | "userId" | "id">
 >;
 
+const workspaceSettingsSchema = z.object({});
+
 export const workspaceSchema = z.object({
   id: z.string(),
   createdAt: z.date(),
@@ -39,6 +41,7 @@ export const workspaceSchema = z.object({
   chatsLimitSecondEmailSentAt: z.date().nullable(),
   storageLimitFirstEmailSentAt: z.date().nullable(),
   storageLimitSecondEmailSentAt: z.date().nullable(),
+  settings: workspaceSettingsSchema.nullable(),
   customChatsLimit: z.number().nullable(),
   customStorageLimit: z.number().nullable(),
   customSeatsLimit: z.number().nullable(),
@@ -46,6 +49,10 @@ export const workspaceSchema = z.object({
   isSuspended: z.boolean(),
   isPastDue: z.boolean(),
   isVerified: z.boolean().nullable(),
+  chatsHardLimit: z.number().nullable(),
+  lastActivityAt: z.date().nullable(),
+  inactiveFirstEmailSentAt: z.date().nullable(),
+  inactiveSecondEmailSentAt: z.date().nullable(),
 }) satisfies z.ZodType<Prisma.Workspace>;
 
 export type Workspace = z.infer<typeof workspaceSchema>;

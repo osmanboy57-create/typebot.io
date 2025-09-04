@@ -1,10 +1,9 @@
 import { isReadWorkspaceFobidden } from "@/features/workspace/helpers/isReadWorkspaceFobidden";
 import { authenticatedProcedure } from "@/helpers/server/trpc";
 import { TRPCError } from "@trpc/server";
-import { getAuthenticatedGoogleClient } from "@typebot.io/lib/google";
+import { getGoogleSpreadsheet } from "@typebot.io/credentials/getGoogleSpreadsheet";
 import prisma from "@typebot.io/prisma";
 import { z } from "@typebot.io/zod";
-import { GoogleSpreadsheet } from "google-spreadsheet";
 
 export const getSpreadsheetName = authenticatedProcedure
   .input(
@@ -51,16 +50,18 @@ export const getSpreadsheetName = authenticatedProcedure
           message: "Credentials not found",
         });
 
-      const client = await getAuthenticatedGoogleClient(credentials.id);
-
-      if (!client)
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Google client could not be initialized",
+      try {
+        const googleSheet = await getGoogleSpreadsheet({
+          credentialsId: credentials.id,
+          spreadsheetId,
+          workspaceId,
         });
 
-      try {
-        const googleSheet = new GoogleSpreadsheet(spreadsheetId, client);
+        if (!googleSheet)
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Google sheet not found",
+          });
 
         await googleSheet.loadInfo();
 
